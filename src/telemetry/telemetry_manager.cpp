@@ -2,8 +2,16 @@
 #include "utils/logger.hpp"
 
 // OpenTelemetry includes
+#ifdef OPENTELEMETRY_HAVE_OTLP_GRPC_EXPORTER
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h>
+#endif
+
+#ifdef OPENTELEMETRY_HAVE_OTLP_HTTP_EXPORTER
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
+#endif
+
 #include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
 #include <opentelemetry/sdk/metrics/metric_reader.h>
@@ -94,11 +102,38 @@ void TelemetryManager::setup_meter_provider() {
         {"telemetry.sdk.version", OPENTELEMETRY_VERSION}
     });
     
-    // Create OTLP exporter
-    opentelemetry::exporter::otlp::OtlpGrpcMetricExporterOptions exporter_options;
-    exporter_options.endpoint = config_.telemetry_endpoint;
+    std::unique_ptr<opentelemetry::sdk::metrics::MetricExporter> exporter;
     
-    auto exporter = opentelemetry::exporter::otlp::OtlpGrpcMetricExporterFactory::Create(exporter_options);
+    // Try to create exporter - prefer gRPC, fall back to HTTP
+#ifdef OPENTELEMETRY_HAVE_OTLP_GRPC_EXPORTER
+    try {
+        opentelemetry::exporter::otlp::OtlpGrpcMetricExporterOptions grpc_options;
+        grpc_options.endpoint = config_.telemetry_endpoint;
+        exporter = opentelemetry::exporter::otlp::OtlpGrpcMetricExporterFactory::Create(grpc_options);
+        utils::Logger::info("Using OTLP gRPC exporter for metrics");
+    } catch (const std::exception& e) {
+        utils::Logger::warn("Failed to create gRPC exporter: {}, trying HTTP", e.what());
+        exporter = nullptr;
+    }
+#endif
+    
+#ifdef OPENTELEMETRY_HAVE_OTLP_HTTP_EXPORTER
+    if (!exporter) {
+        try {
+            opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions http_options;
+            http_options.url = config_.telemetry_endpoint + "/v1/metrics";
+            exporter = opentelemetry::exporter::otlp::OtlpHttpMetricExporterFactory::Create(http_options);
+            utils::Logger::info("Using OTLP HTTP exporter for metrics");
+        } catch (const std::exception& e) {
+            utils::Logger::error("Failed to create HTTP exporter: {}", e.what());
+            throw;
+        }
+    }
+#endif
+    
+    if (!exporter) {
+        throw std::runtime_error("No OTLP exporter available");
+    }
     
     // Create periodic reader
     opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions reader_options;
@@ -130,11 +165,38 @@ void TelemetryManager::setup_tracer_provider() {
         {"service.version", config_.service_version}
     });
     
-    // Create OTLP exporter for traces
-    opentelemetry::exporter::otlp::OtlpGrpcExporterOptions exporter_options;
-    exporter_options.endpoint = config_.telemetry_endpoint;
+    std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter;
     
-    auto exporter = opentelemetry::exporter::otlp::OtlpGrpcExporterFactory::Create(exporter_options);
+    // Try to create exporter - prefer gRPC, fall back to HTTP
+#ifdef OPENTELEMETRY_HAVE_OTLP_GRPC_EXPORTER
+    try {
+        opentelemetry::exporter::otlp::OtlpGrpcExporterOptions grpc_options;
+        grpc_options.endpoint = config_.telemetry_endpoint;
+        exporter = opentelemetry::exporter::otlp::OtlpGrpcExporterFactory::Create(grpc_options);
+        utils::Logger::info("Using OTLP gRPC exporter for traces");
+    } catch (const std::exception& e) {
+        utils::Logger::warn("Failed to create gRPC trace exporter: {}, trying HTTP", e.what());
+        exporter = nullptr;
+    }
+#endif
+    
+#ifdef OPENTELEMETRY_HAVE_OTLP_HTTP_EXPORTER
+    if (!exporter) {
+        try {
+            opentelemetry::exporter::otlp::OtlpHttpExporterOptions http_options;
+            http_options.url = config_.telemetry_endpoint + "/v1/traces";
+            exporter = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create(http_options);
+            utils::Logger::info("Using OTLP HTTP exporter for traces");
+        } catch (const std::exception& e) {
+            utils::Logger::error("Failed to create HTTP trace exporter: {}", e.what());
+            throw;
+        }
+    }
+#endif
+    
+    if (!exporter) {
+        throw std::runtime_error("No OTLP trace exporter available");
+    }
     
     // Create batch span processor
     opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
