@@ -1,0 +1,121 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+wtop
+wtop.exe
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# vcpkg
+vcpkg_installed/
+
+# Package files
+*.zip
+*.tar.gz
+*.deb
+*.rpm
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
+
+# Coverage files
+*.gcov
+*.gcda
+*.gcno
+
+# Profiling files
+*.prof
+
+# Documentation build
+docs/html/
+docs/latex/
+
+# Test results
+test_results/
+*.xml
