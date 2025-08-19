@@ -1,13 +1,13 @@
 #pragma once
 
-#include "system_metrics.hpp"
-#include "utils/config.hpp"
 #include <memory>
 #include <thread>
 #include <atomic>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include "system_metrics.hpp"
+#include "utils/config.hpp"
 
 namespace wtop {
 namespace metrics {
