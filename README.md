@@ -1,245 +1,184 @@
-# wtop - Windows System Monitor
+# wtop - Cross-Platform System Monitor
 
-A modern, interactive system monitoring tool for Windows, similar to htop but designed specifically for Windows systems. Built with OpenTelemetry for metrics collection and CLI11 for command-line interface.
+A lightweight, interactive system monitoring tool similar to htop, built in Go. Provides real-time CPU, memory, disk, and network usage with process monitoring.
 
 ## Features
 
 - **Real-time System Monitoring**: CPU, memory, disk, and network usage
-- **Interactive Process Management**: Sort, filter, and monitor processes
-- **Multiple Display Modes**: Overview, processes, memory, CPU, network, and disk views
-- **OpenTelemetry Integration**: Export metrics to OTLP-compatible backends
-- **Flexible Output Formats**: Interactive terminal UI, JSON, and CSV output
-- **Windows-Optimized**: Native Windows API integration for accurate metrics
+- **Interactive Process List**: View top processes sorted by CPU usage
+- **Cross-Platform**: Works on Windows, Linux, and macOS
+- **Lightweight**: Single executable, no dependencies required
+- **Clean Interface**: Terminal-based UI with auto-refresh
 
 ## Screenshots
 
 ```
-wtop - Windows System Monitor                                    14:30:25 up 2:15
-Tasks: 156 total, 1024 threads                                   Load: 23.5%
---------------------------------------------------------------------------------
-CPU: Intel Core i7-10700K
-Usage: 23.5% (8 cores)
-
+wtop - System Monitor                                           01:16:48
+================================================================================
+CPU: 15.2% (8 cores)
 Memory: 8.2 GB / 16.0 GB (51.2%)
+Disk (C:\): 245.3 GB / 500.0 GB (49.1%)
+Network: ↑ 125.4 MB ↓ 1024.7 MB
 
 Top Processes by CPU:
-PID     Name                 CPU%    Memory
-1234    chrome.exe           15.2    512.3 MB
-5678    code.exe             8.7     256.1 MB
-9012    wtop.exe             2.1     32.5 MB
+PID      Name                      CPU%     Memory    
+------------------------------------------------------------------------
+1234     chrome.exe                15.2     512.3      MB
+5678     code.exe                  8.7      256.1      MB
+9012     wtop.exe                  2.1      32.5       MB
+4567     discord.exe               1.8      145.2      MB
 ```
 
 ## Installation
 
-### Prerequisites
+### Download Pre-built Binaries
 
-- Windows 7 or later
-- Visual Studio 2019 or later (for building from source)
-- CMake 3.16 or later
-- vcpkg (recommended for dependencies)
+Download the appropriate executable for your platform:
+- **Windows**: `wtop-windows.exe`
+- **Linux**: `wtop-linux`
+- **macOS**: `wtop-macos`
 
-### Using vcpkg (Recommended)
+### Build from Source
 
-```bash
-# Install dependencies
-vcpkg install cli11 opentelemetry-cpp
+#### Prerequisites
+- Go 1.18 or later
 
-# Build
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg root]/scripts/buildsystems/vcpkg.cmake
-cmake --build . --config Release
-```
-
-### Manual Build
+#### Build Commands
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/wtop.git
+git clone https://github.com/SwarnenduG07/wtop
 cd wtop
 
-# Create build directory
-mkdir build && cd build
+# Install dependencies
+go mod tidy
 
-# Configure
-cmake .. -DCMAKE_BUILD_TYPE=Release
+# Build for current platform
+go build -o wtop main.go
 
-# Build
-cmake --build . --config Release
-
-# Install (optional)
-cmake --install .
+# Build for specific platforms
+GOOS=windows GOARCH=amd64 go build -o wtop-windows.exe main.go
+GOOS=linux GOARCH=amd64 go build -o wtop-linux main.go
+GOOS=darwin GOARCH=amd64 go build -o wtop-macos main.go
 ```
 
 ## Usage
 
-### Basic Usage
+### Running wtop
 
+#### Windows
+```cmd
+# Command Prompt or PowerShell
+wtop-windows.exe
+
+# Or double-click the executable
+```
+
+#### Linux/macOS
 ```bash
-# Start wtop with default settings
-wtop
+# Make executable (first time only)
+chmod +x wtop-linux
 
-# Custom refresh rate (500ms)
-wtop --refresh 500
-
-# JSON output mode
-wtop --output json
-
-# CSV output mode
-wtop --output csv
-
-# Disable telemetry
-wtop --no-telemetry
-
-# Show only specific metrics
-wtop --no-network --no-disk
+# Run
+./wtop-linux
 ```
 
-### Interactive Controls
+### Controls
 
-| Key | Action |
-|-----|--------|
-| `1-6` | Switch between views (Overview, Processes, Memory, CPU, Network, Disk) |
-| `h`, `?` | Show/hide help |
-| `q`, `ESC` | Quit |
-| `p` | Sort processes by PID |
-| `n` | Sort processes by Name |
-| `c` | Sort processes by CPU usage |
-| `m` | Sort processes by Memory usage |
-| `t` | Sort processes by Thread count |
-| `r` | Reverse sort order |
-| `↑`/`↓` | Scroll process list |
-| `/` | Filter processes |
+- **Ctrl+C** or **Ctrl+D**: Exit wtop
+- Auto-refreshes every 3 seconds
 
-### Command Line Options
+## System Requirements
 
-```
-wtop - Windows System Monitor
+- **Windows**: Windows 7 or later
+- **Linux**: Any modern Linux distribution
+- **macOS**: macOS 10.12 or later
+- **Architecture**: 64-bit (amd64)
 
-USAGE:
-  wtop [OPTIONS]
-
-OPTIONS:
-  -h,--help                   Print this help message and exit
-  -r,--refresh INT:INT in [100 - 10000]
-                              Refresh rate in milliseconds (default: 1000)
-  --no-telemetry              Disable OpenTelemetry metrics collection
-  -l,--log-level ENUM:value in {debug->0,info->1,warn->2,error->3} OR {0,1,2,3}
-                              Log level (debug, info, warn, error)
-  -o,--output ENUM:value in {interactive->0,json->1,csv->2} OR {0,1,2}
-                              Output format (interactive, json, csv)
-  --no-processes              Hide process information
-  --no-memory                 Hide memory information
-  --no-cpu                    Hide CPU information
-  --no-network                Hide network information
-  --no-disk                   Hide disk information
-```
-
-## Configuration
-
-### OpenTelemetry Configuration
-
-wtop supports exporting metrics to OpenTelemetry-compatible backends:
-
-```bash
-# Set OTLP endpoint
-set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-
-# Set service name
-set OTEL_SERVICE_NAME=wtop
-
-# Set resource attributes
-set OTEL_RESOURCE_ATTRIBUTES=service.version=1.0.0,deployment.environment=production
-```
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WTOP_REFRESH_RATE` | Refresh rate in milliseconds | 1000 |
-| `WTOP_LOG_LEVEL` | Log level (debug, info, warn, error) | info |
-| `WTOP_TELEMETRY_ENDPOINT` | OpenTelemetry endpoint | http://localhost:4317 |
-| `WTOP_NO_COLOR` | Disable colored output | false |
-
-## Metrics
-
-wtop collects and can export the following metrics via OpenTelemetry:
+## What wtop Shows
 
 ### System Metrics
-- `system.cpu.usage` - CPU usage percentage
-- `system.memory.usage` - Memory usage in bytes
-- `system.memory.available` - Available memory in bytes
-- `system.network.bytes` - Network bytes transferred
-- `system.disk.io` - Disk I/O operations
-- `system.disk.free` - Free disk space in bytes
+- **CPU Usage**: Overall CPU percentage and core count
+- **Memory**: Used/Total memory in GB with percentage
+- **Disk**: Used/Total disk space with percentage
+- **Network**: Total bytes sent (↑) and received (↓)
 
-### Process Metrics
-- `process.cpu.usage` - Per-process CPU usage
-- `process.memory.usage` - Per-process memory usage
-- `system.process.count` - Total number of processes
+### Process Information
+- **PID**: Process ID
+- **Name**: Process name (truncated if too long)
+- **CPU%**: Current CPU usage percentage
+- **Memory**: Memory usage in MB
 
-## Architecture
+## Dependencies
+
+wtop uses minimal dependencies:
+- `github.com/shirou/gopsutil/v3` - Cross-platform system metrics
+
+## Project Structure
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   CLI11         │    │  OpenTelemetry   │    │  Windows APIs   │
-│  (Arguments)    │    │   (Metrics)      │    │   (Data)        │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        wtop Core                                │
-├─────────────────┬──────────────────┬─────────────────────────────┤
-│   UI Display    │  Metrics Manager │    Telemetry Manager        │
-│   - Terminal    │  - Collection    │    - OTLP Export            │
-│   - Formatting  │  - Aggregation   │    - Instrumentation        │
-│   - Interaction │  - History       │    - Tracing                │
-└─────────────────┴──────────────────┴─────────────────────────────┘
+wtop/
+├── main.go                 # Main source code
+├── go.mod                  # Go module file
+├── go.sum                  # Dependency checksums
+├── build.sh               # Cross-platform build script
+├── build-windows.bat      # Windows build script
+├── wtop-windows.exe       # Windows executable
+├── wtop-linux            # Linux executable
+├── wtop-macos            # macOS executable
+└── README.md             # This file
 ```
 
 ## Development
 
-### Project Structure
-
-```
-wtop/
-├── include/
-│   ├── metrics/
-│   │   ├── system_metrics.hpp
-│   │   └── metrics_manager.hpp
-│   ├── telemetry/
-│   │   └── telemetry_manager.hpp
-│   ├── ui/
-│   │   └── display.hpp
-│   └── utils/
-│       ├── config.hpp
-│       └── logger.hpp
-├── src/
-│   ├── metrics/
-│   ├── telemetry/
-│   ├── ui/
-│   └── utils/
-├── main.cpp
-├── CMakeLists.txt
-└── README.md
-```
-
-### Building for Development
+### Local Development
 
 ```bash
-# Debug build
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+# Run directly with Go
+go run main.go
 
-# Build with tests
-cmake --build . --config Debug
-ctest
+# Build and run
+go build -o wtop main.go
+./wtop
 ```
 
-### Contributing
+### Code Structure
+
+- **System Metrics**: CPU, memory, disk, network collection
+- **Process Management**: Process enumeration and sorting
+- **Display**: Terminal UI with cross-platform screen clearing
+- **Error Handling**: Graceful handling of unavailable metrics
+
+## Performance
+
+- **Memory Usage**: ~5-10 MB
+- **CPU Impact**: Minimal (<1% on most systems)
+- **Refresh Rate**: 3 seconds (configurable in code)
+- **Process Limit**: Shows top 15 processes by CPU usage
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Permission Denied (Linux/macOS)**
+   ```bash
+   chmod +x wtop-linux
+   ```
+
+2. **"Cannot execute binary file"**
+   - Ensure you're using the correct binary for your architecture
+   - Download the appropriate version for your OS
+
+3. **Metrics showing "N/A"**
+   - Some metrics may be unavailable on certain systems
+   - This is normal and doesn't affect other functionality
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Test on multiple platforms
 5. Submit a pull request
 
 ## License
@@ -248,12 +187,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [CLI11](https://github.com/CLIUtils/CLI11) - Command line parser
-- [OpenTelemetry C++](https://github.com/open-telemetry/opentelemetry-cpp) - Observability framework
+- [gopsutil](https://github.com/shirou/gopsutil) - Cross-platform system metrics library
 - [htop](https://htop.dev/) - Inspiration for the interface design
 
 ## Support
 
-- GitHub Issues: [Report bugs and request features](https://github.com/your-org/wtop/issues)
-- Documentation: [Wiki](https://github.com/your-org/wtop/wiki)
-- Discussions: [GitHub Discussions](https://github.com/your-org/wtop/discussions)
+- **Issues**: [GitHub Issues](https://github.com/your-org/wtop/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/wtop/discussions)
+
+---
+
+**wtop** - Simple, fast, cross-platform system monitoring in your terminal.
