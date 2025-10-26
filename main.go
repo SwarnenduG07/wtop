@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -82,7 +83,35 @@ func drawColorBar(percent float64, width int) string {
 			bar += " "
 		}
 	}
-	bar += fmt.Sprintf("] %.1f%%", percent)
+	bar += fmt.Sprintf("] %s%.1f%%%s", color, percent, Reset)
+	return bar
+}
+
+func drawMemoryBar(percent float64, width int) string {
+	filled := int(percent * float64(width) / 100)
+	if filled > width {
+		filled = width
+	}
+	
+	// Memory-specific colors (more aggressive)
+	color := Green
+	if percent > 90 {
+		color = Red + Bold
+	} else if percent > 75 {
+		color = Red
+	} else if percent > 50 {
+		color = Yellow
+	}
+	
+	bar := "["
+	for i := 0; i < width; i++ {
+		if i < filled {
+			bar += color + "█" + Reset
+		} else {
+			bar += " "
+		}
+	}
+	bar += fmt.Sprintf("] %s%.1f%%%s", color, percent, Reset)
 	return bar
 }
 
@@ -108,32 +137,51 @@ func updateCPUBars(row *int) {
 	cpuPercents, _ := cpu.Percent(0, true)
 	cpuCount := len(cpuPercents)
 	
-	// CPU cores in compact htop style
+	// CPU header with spacing
+	moveCursor(*row, 1)
+	clearLine()
+	fmt.Printf("%s%sCPU USAGE:%s", Bold+Cyan, " ", Reset)
+	*row++
+	
+	// CPU cores in compact htop style with better spacing
 	maxCores := cpuCount
 	if maxCores > 16 { maxCores = 16 }
 	
-	for i := 0; i < maxCores; i += 8 {
+	for i := 0; i < maxCores; i += 4 {
 		moveCursor(*row, 1)
 		clearLine()
 		
-		for j := 0; j < 8 && (i+j) < maxCores; j++ {
+		for j := 0; j < 4 && (i+j) < maxCores; j++ {
 			coreIdx := i + j
 			if coreIdx < len(cpuPercents) {
-				fmt.Printf("%s%2d%s%s ", Cyan, coreIdx+1, Reset, drawColorBar(cpuPercents[coreIdx], 8))
+				fmt.Printf("  %s%2d%s%s", Bold+Cyan, coreIdx+1, Reset, drawColorBar(cpuPercents[coreIdx], 12))
+				if j < 3 && (i+j+1) < maxCores {
+					fmt.Print("  ")
+				}
 			}
 		}
 		*row++
 	}
+	
+	// Add spacing after CPU section
+	*row++
+	*row++
 }
 
 func updateMemoryBar(row *int) {
 	v, err := mem.VirtualMemory()
 	if err == nil {
+		// Memory header
 		moveCursor(*row, 1)
 		clearLine()
-		fmt.Printf("%sMem%s%s %.1fG/%.1fG", 
+		fmt.Printf("%s%sMEMORY & SWAP:%s", Bold+Purple, " ", Reset)
+		*row++
+		
+		moveCursor(*row, 1)
+		clearLine()
+		fmt.Printf("%s  Mem:%s %s  %.1fG/%.1fG", 
 			Bold+Purple, Reset,
-			drawColorBar(v.UsedPercent, 40),
+			drawMemoryBar(v.UsedPercent, 35),
 			float64(v.Used)/1024/1024/1024, 
 			float64(v.Total)/1024/1024/1024)
 		*row++
@@ -143,17 +191,26 @@ func updateMemoryBar(row *int) {
 		if swap.Total > 0 {
 			moveCursor(*row, 1)
 			clearLine()
-			fmt.Printf("%sSwp%s%s %.1fG/%.1fG", 
+			fmt.Printf("%s  Swp:%s %s  %.1fG/%.1fG", 
 				Bold+Purple, Reset,
-				drawColorBar(swap.UsedPercent, 40),
+				drawMemoryBar(swap.UsedPercent, 35),
 				float64(swap.Used)/1024/1024/1024, 
 				float64(swap.Total)/1024/1024/1024)
 			*row++
 		}
+		
+		// Add spacing after memory section
+		*row++
 	}
 }
 
 func updateSystemInfo(row *int) {
+	// System info header
+	moveCursor(*row, 1)
+	clearLine()
+	fmt.Printf("%s%sSYSTEM INFO:%s", Bold+Green, " ", Reset)
+	*row++
+	
 	// Task count
 	processes, _ := process.Processes()
 	totalTasks := len(processes)
@@ -171,8 +228,9 @@ func updateSystemInfo(row *int) {
 	
 	moveCursor(*row, 1)
 	clearLine()
-	fmt.Printf("%sTasks: %s%d%s, %s%d%s thr; %s%d%s running", 
-		Bold+White, Green, totalTasks, Reset,
+	fmt.Printf("  %sTasks:%s %s%d%s, %s%d%s thr; %s%d%s running", 
+		Bold+White, Reset,
+		Green, totalTasks, Reset,
 		Green, totalThreads, Reset,
 		Green, runningTasks, Reset)
 	*row++
@@ -183,13 +241,80 @@ func updateSystemInfo(row *int) {
 		if err == nil {
 			moveCursor(*row, 1)
 			clearLine()
-			fmt.Printf("%sLoad average: %s%.2f %.2f %.2f%s", 
-				Bold+Green, Green, loadAvg.Load1, loadAvg.Load5, loadAvg.Load15, Reset)
+			fmt.Printf("  %sLoad avg:%s %s%.2f %.2f %.2f%s", 
+				Bold+Green, Reset,
+				Green, loadAvg.Load1, loadAvg.Load5, loadAvg.Load15, Reset)
 			*row++
 		}
 	}
 	
-	*row++ // Empty line
+	// Add spacing before process table
+	*row++
+	*row++
+}
+
+func getCleanProcessName(name, cmdline string) string {
+	// If no command line, use process name
+	if cmdline == "" {
+		return name
+	}
+	
+	// Extract service names from common Windows paths
+	if len(cmdline) > 30 {
+		// Chrome processes
+		if strings.Contains(cmdline, "chrome.exe") {
+			return "Google Chrome"
+		}
+		// VS Code
+		if strings.Contains(cmdline, "Code.exe") {
+			return "Visual Studio Code"
+		}
+		// Slack
+		if strings.Contains(cmdline, "slack.exe") {
+			return "Slack"
+		}
+		// Discord
+		if strings.Contains(cmdline, "discord.exe") || strings.Contains(cmdline, "Discord.exe") {
+			return "Discord"
+		}
+		// NVIDIA services
+		if strings.Contains(cmdline, "NVIDIA") || strings.Contains(cmdline, "nvidia") {
+			if strings.Contains(cmdline, "nvcontainer") {
+				return "NVIDIA Container"
+			}
+			return "NVIDIA Service"
+		}
+		// Windows system processes
+		if strings.Contains(cmdline, "sihost.exe") {
+			return "Shell Infrastructure Host"
+		}
+		if strings.Contains(cmdline, "svchost.exe") {
+			return "Service Host Process"
+		}
+		if strings.Contains(cmdline, "RuntimeBroker.exe") {
+			return "Runtime Broker"
+		}
+		if strings.Contains(cmdline, "conhost.exe") {
+			return "Console Window Host"
+		}
+		if strings.Contains(cmdline, "SystemApps") {
+			return "Windows System App"
+		}
+		// Extract filename from path
+		parts := strings.Split(cmdline, "\\")
+		if len(parts) > 0 {
+			filename := parts[len(parts)-1]
+			// Remove quotes and .exe extension
+			filename = strings.Trim(filename, "\"")
+			filename = strings.TrimSuffix(filename, ".exe")
+			if filename != "" {
+				return filename
+			}
+		}
+	}
+	
+	// Fallback to process name
+	return name
 }
 
 func getProcessInfo(p *process.Process) *ProcessInfo {
@@ -224,12 +349,9 @@ func getProcessInfo(p *process.Process) *ProcessInfo {
 	}
 	
 	cmdline, _ := p.Cmdline()
-	if len(cmdline) > 30 {
-		cmdline = cmdline[:27] + "..."
-	}
-	if cmdline == "" {
-		cmdline = name
-	}
+	
+	// Get clean service name
+	cleanName := getCleanProcessName(name, cmdline)
 	
 	threads, _ := p.NumThreads()
 	createTime, _ := p.CreateTime()
@@ -241,7 +363,7 @@ func getProcessInfo(p *process.Process) *ProcessInfo {
 	return &ProcessInfo{
 		PID:        p.Pid,
 		PPID:       ppid,
-		Name:       name,
+		Name:       cleanName, // Use clean name instead of raw name
 		User:       username,
 		Priority:   priority,
 		Nice:       nice,
@@ -252,7 +374,7 @@ func getProcessInfo(p *process.Process) *ProcessInfo {
 		ResMem:     resMem,
 		ShrMem:     shrMem,
 		Status:     statusStr,
-		Command:    cmdline,
+		Command:    cleanName, // Use clean name for command too
 		Threads:    threads,
 		CreateTime: createTime,
 	}
@@ -298,7 +420,7 @@ func updateProcessTable(row *int) {
 	// Header
 	moveCursor(*row, 1)
 	clearLine()
-	fmt.Printf("%s  PID USER      PRI  NI    VIRT    RES    SHR S  %%CPU %%MEM     TIME+ COMMAND%s", Bold+White, Reset)
+	fmt.Printf("%s  PID USER      PRI  NI    VIRT    RES    SHR S  %%CPU %%MEM     TIME+ SERVICE/PROCESS%s", Bold+White, Reset)
 	*row++
 	
 	// Process list
@@ -317,9 +439,9 @@ func updateProcessTable(row *int) {
 			user = user[:9]
 		}
 		
-		command := info.Command
-		if len(command) > 25 {
-			command = command[:22] + "..."
+		serviceName := info.Name
+		if len(serviceName) > 20 {
+			serviceName = serviceName[:17] + "..."
 		}
 		
 		// Calculate runtime
@@ -332,7 +454,7 @@ func updateProcessTable(row *int) {
 		shrStr := fmt.Sprintf("%.0fM", float64(info.ShrMem)/1024/1024)
 		
 		// All processes in green color
-		fmt.Printf("%s%5d %-9s %3d %3d %7s %7s %7s %s %5.1f %4.1f %9s %-25s%s",
+		fmt.Printf("%s%5d %-9s %3d %3d %7s %7s %7s %s %5.1f %4.1f %9s %-20s%s",
 			Green,
 			info.PID,
 			user,
@@ -345,7 +467,7 @@ func updateProcessTable(row *int) {
 			info.CPUPercent,
 			info.MemPercent,
 			timeStr,
-			command,
+			serviceName,
 			Reset)
 		
 		*row++
