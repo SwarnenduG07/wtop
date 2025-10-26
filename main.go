@@ -143,7 +143,6 @@ func updateCPUBars(row *int) {
 	fmt.Printf("%s%sCPU USAGE:%s", Bold+Cyan, " ", Reset)
 	*row++
 	
-	// CPU cores in compact htop style with better spacing
 	maxCores := cpuCount
 	if maxCores > 16 { maxCores = 16 }
 	
@@ -163,7 +162,7 @@ func updateCPUBars(row *int) {
 		*row++
 	}
 	
-	// Add spacing after CPU section
+
 	*row++
 	*row++
 }
