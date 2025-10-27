@@ -8,25 +8,36 @@ import (
 )
 
 type GPUInfo struct {
-	Index          int
-	Name           string
-	Driver         string
-	Utilization    float64
-	MemoryUsed     float64
-	MemoryTotal    float64
-	Temperature    float64
-	PowerUsage     float64
-	PowerLimit     float64
-	FanSpeed       float64
-	FanRPM         int
-	ClockCore      int
-	ClockMemory    int
+	Index              int
+	Name               string
+	Driver             string
+	Utilization        float64
+	MemoryUsed         float64
+	MemoryTotal        float64
+	Temperature        float64
+	PowerUsage         float64
+	PowerLimit         float64
+	FanSpeed           float64
+	FanRPM             int
+	ClockCore          int
+	ClockMemory        int
+	ClockSM            int
+	PerformanceState   string
+	ThrottleReasons    []string
+	MemoryUtilization  float64
+	PCIeGen            int
+	PCIeWidth          int
+	ComputeMode        string
+	MemoryBusWidth     int
+	PowerState         string
+	TempSlowdown       float64
 }
 
 type GPUProcess struct {
 	PID         int
 	ProcessName string
 	MemoryUsed  float64
+	Type        string
 }
 
 func getNvidiaSmiCmd() string {
@@ -37,10 +48,8 @@ func getNvidiaSmiCmd() string {
 }
 
 func estimateFanRPM(temp float64, power float64) int {
-	// Estimate fan RPM based on temperature and power
-	// Typical laptop GPU fan: 2000-5000 RPM range
 	if temp < 40 {
-		return 0 // Fan off or very low
+		return 0
 	} else if temp < 50 {
 		return 1500 + int(power*20)
 	} else if temp < 60 {
@@ -59,7 +68,6 @@ func getFanSpeedFromWMI() float64 {
 		return 0
 	}
 	
-	// Try to get fan speed from WMI
 	cmd := exec.Command("wmic", "path", "Win32_Fan", "get", "DesiredSpeed", "/format:csv")
 	output, err := cmd.Output()
 	if err != nil {
@@ -82,9 +90,52 @@ func getFanSpeedFromWMI() float64 {
 	return 0
 }
 
+func parseThrottleReasons(value string) []string {
+	reasons := []string{}
+	val := parseInt(value)
+	
+	if val == 0 {
+		return []string{"None"}
+	}
+	
+	if val&0x01 != 0 {
+		reasons = append(reasons, "GPU Idle")
+	}
+	if val&0x02 != 0 {
+		reasons = append(reasons, "App Clocks")
+	}
+	if val&0x04 != 0 {
+		reasons = append(reasons, "SW Power Cap")
+	}
+	if val&0x08 != 0 {
+		reasons = append(reasons, "HW Slowdown")
+	}
+	if val&0x10 != 0 {
+		reasons = append(reasons, "Sync Boost")
+	}
+	if val&0x20 != 0 {
+		reasons = append(reasons, "SW Thermal")
+	}
+	if val&0x40 != 0 {
+		reasons = append(reasons, "HW Thermal")
+	}
+	if val&0x80 != 0 {
+		reasons = append(reasons, "HW Power Brake")
+	}
+	if val&0x100 != 0 {
+		reasons = append(reasons, "Display Clock")
+	}
+	
+	if len(reasons) == 0 {
+		reasons = append(reasons, "Unknown")
+	}
+	
+	return reasons
+}
+
 func GetGPUInfo() ([]*GPUInfo, error) {
 	cmd := exec.Command(getNvidiaSmiCmd(),
-		"--query-gpu=index,name,driver_version,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed,clocks.gr,clocks.mem",
+		"--query-gpu=index,name,driver_version,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed,clocks.gr,clocks.mem,clocks.sm,pstate,clocks_throttle_reasons.active,utilization.memory,pcie.link.gen.current,pcie.link.width.current,compute_mode,temperature.gpu.tlimit",
 		"--format=csv,noheader,nounits")
 	
 	output, err := cmd.Output()
@@ -95,12 +146,11 @@ func GetGPUInfo() ([]*GPUInfo, error) {
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var gpus []*GPUInfo
 	
-	// Try to get fan speed from WMI for laptop GPUs
 	wmiFanSpeed := getFanSpeedFromWMI()
 	
 	for _, line := range lines {
 		fields := strings.Split(line, ", ")
-		if len(fields) < 12 {
+		if len(fields) < 20 {
 			continue
 		}
 		
@@ -108,35 +158,50 @@ func GetGPUInfo() ([]*GPUInfo, error) {
 		power := parseFloat(fields[7])
 		fanSpeed := parseFloat(fields[9])
 		
-		// If fan speed is 0 or N/A, use WMI or estimate
 		fanRPM := 0
 		if fanSpeed == 0 {
 			if wmiFanSpeed > 0 {
 				fanRPM = int(wmiFanSpeed)
-				fanSpeed = (wmiFanSpeed / 5000) * 100 // Estimate percentage
+				fanSpeed = (wmiFanSpeed / 5000) * 100
 			} else {
 				fanRPM = estimateFanRPM(temp, power)
-				fanSpeed = float64(fanRPM) / 50 // Convert RPM to approximate %
+				fanSpeed = float64(fanRPM) / 50
 			}
 		} else {
-			// Calculate RPM from percentage (assume max 5000 RPM)
 			fanRPM = int(fanSpeed * 50)
 		}
 		
+		pstate := strings.TrimSpace(fields[13])
+		throttleReasons := parseThrottleReasons(fields[14])
+		
+		pcieGen := parseInt(fields[16])
+		pcieWidth := parseInt(fields[17])
+		memBusWidth := pcieWidth * 32
+		
 		gpu := &GPUInfo{
-			Index:        parseInt(fields[0]),
-			Name:         strings.TrimSpace(fields[1]),
-			Driver:       strings.TrimSpace(fields[2]),
-			Utilization:  parseFloat(fields[3]),
-			MemoryUsed:   parseFloat(fields[4]),
-			MemoryTotal:  parseFloat(fields[5]),
-			Temperature:  temp,
-			PowerUsage:   power,
-			PowerLimit:   parseFloat(fields[8]),
-			FanSpeed:     fanSpeed,
-			FanRPM:       fanRPM,
-			ClockCore:    parseInt(fields[10]),
-			ClockMemory:  parseInt(fields[11]),
+			Index:             parseInt(fields[0]),
+			Name:              strings.TrimSpace(fields[1]),
+			Driver:            strings.TrimSpace(fields[2]),
+			Utilization:       parseFloat(fields[3]),
+			MemoryUsed:        parseFloat(fields[4]),
+			MemoryTotal:       parseFloat(fields[5]),
+			Temperature:       temp,
+			PowerUsage:        power,
+			PowerLimit:        parseFloat(fields[8]),
+			FanSpeed:          fanSpeed,
+			FanRPM:            fanRPM,
+			ClockCore:         parseInt(fields[10]),
+			ClockMemory:       parseInt(fields[11]),
+			ClockSM:           parseInt(fields[12]),
+			PerformanceState:  pstate,
+			ThrottleReasons:   throttleReasons,
+			MemoryUtilization: parseFloat(fields[15]),
+			PCIeGen:           pcieGen,
+			PCIeWidth:         pcieWidth,
+			PowerState:        pstate,
+			MemoryBusWidth:    memBusWidth,
+			ComputeMode:       strings.TrimSpace(fields[18]),
+			TempSlowdown:      parseFloat(fields[19]),
 		}
 		
 		gpus = append(gpus, gpu)
@@ -151,10 +216,7 @@ func GetGPUProcesses(gpuIndex int) ([]*GPUProcess, error) {
 		"--format=csv,noheader,nounits",
 		"-i", strconv.Itoa(gpuIndex))
 	
-	output, err := cmd.Output()
-	if err != nil {
-		return []*GPUProcess{}, nil
-	}
+	output, _ := cmd.Output()
 	
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var processes []*GPUProcess
@@ -172,6 +234,7 @@ func GetGPUProcesses(gpuIndex int) ([]*GPUProcess, error) {
 			PID:         parseInt(fields[0]),
 			ProcessName: strings.TrimSpace(fields[1]),
 			MemoryUsed:  parseFloat(fields[2]),
+			Type:        "Compute",
 		}
 		processes = append(processes, proc)
 	}
@@ -208,7 +271,7 @@ func GetIntelGPU() (*GPUInfo, error) {
 
 func parseInt(s string) int {
 	s = strings.TrimSpace(s)
-	if s == "[N/A]" || s == "" || s == "[Not Supported]" {
+	if s == "[N/A]" || s == "" || s == "[Not Supported]" || s == "[Unknown Error]" {
 		return 0
 	}
 	val, _ := strconv.Atoi(s)
@@ -217,7 +280,7 @@ func parseInt(s string) int {
 
 func parseFloat(s string) float64 {
 	s = strings.TrimSpace(s)
-	if s == "[N/A]" || s == "" || s == "[Not Supported]" {
+	if s == "[N/A]" || s == "" || s == "[Not Supported]" || s == "[Unknown Error]" {
 		return 0
 	}
 	val, _ := strconv.ParseFloat(s, 64)

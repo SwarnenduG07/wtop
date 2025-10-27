@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/yourusername/wtop/metrics"
 )
@@ -41,7 +42,6 @@ func drawTempBar(temp float64, width int) string {
 func RenderGPU(row *int) {
 	gpus, err := metrics.GetGPUInfo()
 	
-	// Show NVIDIA GPUs
 	if err == nil && len(gpus) > 0 {
 		MoveCursor(*row, 1)
 		ClearLine()
@@ -49,6 +49,7 @@ func RenderGPU(row *int) {
 		*row++
 		
 		for _, gpu := range gpus {
+			// GPU Name and Driver
 			MoveCursor(*row, 1)
 			ClearLine()
 			fmt.Printf("  %s[%d]%s %s %s(Driver: %s)%s", 
@@ -56,7 +57,27 @@ func RenderGPU(row *int) {
 				Cyan, gpu.Driver, Reset)
 			*row++
 			
-			// Utilization and Memory
+			// Performance State and Compute Mode
+			MoveCursor(*row, 1)
+			ClearLine()
+			pstateColor := Green
+			if gpu.PerformanceState == "P0" {
+				pstateColor = Red
+			} else if gpu.PerformanceState == "P2" || gpu.PerformanceState == "P3" {
+				pstateColor = Yellow
+			}
+			fmt.Printf("  %sP-State:%s %s%s%s  %sCompute:%s %s%s%s  %sBus:%s %s%d-bit%s  %sPCIe:%s %sGen%dx%d%s",
+				Bold+Blue, Reset,
+				pstateColor, gpu.PerformanceState, Reset,
+				Bold+Blue, Reset,
+				Green, gpu.ComputeMode, Reset,
+				Bold+Blue, Reset,
+				Green, gpu.MemoryBusWidth, Reset,
+				Bold+Blue, Reset,
+				Green, gpu.PCIeGen, gpu.PCIeWidth, Reset)
+			*row++
+			
+			// GPU and Memory Utilization
 			MoveCursor(*row, 1)
 			ClearLine()
 			memPercent := (gpu.MemoryUsed / gpu.MemoryTotal) * 100
@@ -66,6 +87,16 @@ func RenderGPU(row *int) {
 				Bold+Blue, Reset,
 				DrawMemoryBar(memPercent, 15),
 				gpu.MemoryUsed/1024, gpu.MemoryTotal/1024)
+			*row++
+			
+			// Memory Controller Utilization
+			MoveCursor(*row, 1)
+			ClearLine()
+			fmt.Printf("  %sMem Ctrl:%s %s  %sSM:%s %s%dMHz%s",
+				Bold+Blue, Reset,
+				DrawColorBar(gpu.MemoryUtilization, 15),
+				Bold+Blue, Reset,
+				Green, gpu.ClockSM, Reset)
 			*row++
 			
 			// Temperature, Power, Fan
@@ -109,6 +140,32 @@ func RenderGPU(row *int) {
 				Green, gpu.ClockMemory, Reset)
 			*row++
 			
+			// Throttle Reasons
+			MoveCursor(*row, 1)
+			ClearLine()
+			throttleStr := strings.Join(gpu.ThrottleReasons, ", ")
+			throttleColor := Green
+			if len(gpu.ThrottleReasons) > 1 || (len(gpu.ThrottleReasons) == 1 && gpu.ThrottleReasons[0] != "None" && gpu.ThrottleReasons[0] != "GPU Idle") {
+				throttleColor = Yellow
+			}
+			if strings.Contains(throttleStr, "Thermal") || strings.Contains(throttleStr, "Power") {
+				throttleColor = Red
+			}
+			fmt.Printf("  %sThrottle:%s %s%s%s",
+				Bold+Blue, Reset,
+				throttleColor, throttleStr, Reset)
+			*row++
+			
+			// Temperature Limits
+			if gpu.TempSlowdown > 0 {
+				MoveCursor(*row, 1)
+				ClearLine()
+				fmt.Printf("  %sTemp Limits:%s Slowdown: %s%.0f°C%s",
+					Bold+Blue, Reset,
+					Yellow, gpu.TempSlowdown, Reset)
+				*row++
+			}
+			
 			// GPU Processes
 			processes, err := metrics.GetGPUProcesses(gpu.Index)
 			if err == nil && len(processes) > 0 {
@@ -119,21 +176,27 @@ func RenderGPU(row *int) {
 				
 				count := 0
 				for _, proc := range processes {
-					if count >= 5 {
+					if count >= 8 {
 						break
 					}
 					MoveCursor(*row, 1)
 					ClearLine()
 					
 					procName := proc.ProcessName
-					if len(procName) > 30 {
-						procName = procName[:27] + "..."
+					if len(procName) > 25 {
+						procName = procName[:22] + "..."
 					}
 					
-					fmt.Printf("    %sPID:%s %s%-6d%s  %s%-30s%s  %sMem:%s %s%.0fMB%s",
+					typeColor := Cyan
+					if proc.Type == "Graphics" {
+						typeColor = Purple
+					}
+					
+					fmt.Printf("    %sPID:%s %s%-6d%s  %s%-25s%s  %s[%s]%s  %sMem:%s %s%.0fMB%s",
 						Yellow, Reset,
 						Green, proc.PID, Reset,
 						Green, procName, Reset,
+						typeColor, proc.Type, Reset,
 						Yellow, Reset,
 						Green, proc.MemoryUsed, Reset)
 					*row++
