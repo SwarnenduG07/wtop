@@ -100,6 +100,9 @@ func RenderProcessTable(row *int, width int, limit int) {
 		user := FitString(info.User, userWidth)
 		name := FitString(info.Name, nameWidth)
 		runtime := currentTime - info.CreateTime/1000
+		if runtime < 0 {
+			runtime = 0
+		}
 		timeStr := formatTime(runtime)
 
 		line := ""
