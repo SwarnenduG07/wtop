@@ -41,14 +41,11 @@ func RenderCPU(row *int, width int, limit int) {
 	}
 
 	barWidth := width/coresPerRow - 18
-	if barWidth > width-12 {
-		barWidth = width - 12
-	}
-	if barWidth < 6 {
-		barWidth = width - 12
-	}
 	if barWidth < 3 {
 		barWidth = 3
+	}
+	if barWidth > width-12 {
+		barWidth = width - 12
 	}
 
 	availableRows := limit - *row + 1
@@ -94,21 +91,27 @@ func RenderCPU(row *int, width int, limit int) {
 			if adjustedWidth < 3 {
 				adjustedWidth = 3
 			}
-			line.Reset()
-			for j := 0; j < coresPerRow; j++ {
-				coreIdx := i + j
-				if coreIdx >= maxCores {
+			for {
+				line.Reset()
+				for j := 0; j < coresPerRow; j++ {
+					coreIdx := i + j
+					if coreIdx >= maxCores {
+						break
+					}
+					if line.Len() > 0 {
+						line.WriteString("  ")
+					}
+					label := fmt.Sprintf("%s%2d%s", Bold+Cyan, coreIdx+1, Reset)
+					line.WriteString(label)
+					line.WriteByte(' ')
+					line.WriteString(DrawColorBar(cpuPercents[coreIdx], adjustedWidth))
+				}
+				output = line.String()
+				if VisibleLength(output) <= width || adjustedWidth <= 3 {
 					break
 				}
-				if line.Len() > 0 {
-					line.WriteString("  ")
-				}
-				label := fmt.Sprintf("%s%2d%s", Bold+Cyan, coreIdx+1, Reset)
-				line.WriteString(label)
-				line.WriteByte(' ')
-				line.WriteString(DrawColorBar(cpuPercents[coreIdx], adjustedWidth))
+				adjustedWidth--
 			}
-			output = line.String()
 		}
 
 		fmt.Print(output)
