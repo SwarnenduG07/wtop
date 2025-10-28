@@ -4,15 +4,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/SwarnenduG07/wtop/types"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/yourusername/wtop/types"
 )
 
 func GetCleanProcessName(name, cmdline string) string {
 	if cmdline == "" {
 		return name
 	}
-	
+
 	if len(cmdline) > 30 {
 		if strings.Contains(cmdline, "chrome.exe") {
 			return "Google Chrome"
@@ -47,7 +47,7 @@ func GetCleanProcessName(name, cmdline string) string {
 		if strings.Contains(cmdline, "SystemApps") {
 			return "Windows System App"
 		}
-		
+
 		parts := strings.Split(cmdline, "\\")
 		if len(parts) > 0 {
 			filename := parts[len(parts)-1]
@@ -58,7 +58,7 @@ func GetCleanProcessName(name, cmdline string) string {
 			}
 		}
 	}
-	
+
 	return name
 }
 
@@ -67,15 +67,15 @@ func GetProcessInfo(p *process.Process) *types.ProcessInfo {
 	if name == "" {
 		name = "Unknown"
 	}
-	
+
 	ppid, _ := p.Ppid()
 	username, _ := p.Username()
 	if username == "" {
 		username = "N/A"
 	}
-	
+
 	cpuPercent, _ := p.CPUPercent()
-	
+
 	memInfo, _ := p.MemoryInfo()
 	var memory, virtMem, resMem, shrMem uint64 = 0, 0, 0, 0
 	if memInfo != nil {
@@ -84,21 +84,21 @@ func GetProcessInfo(p *process.Process) *types.ProcessInfo {
 		resMem = memInfo.RSS
 		shrMem = memInfo.RSS / 4
 	}
-	
+
 	memPercent, _ := p.MemoryPercent()
-	
+
 	status, _ := p.Status()
 	statusStr := "S"
 	if len(status) > 0 {
 		statusStr = status[0]
 	}
-	
+
 	cmdline, _ := p.Cmdline()
 	cleanName := GetCleanProcessName(name, cmdline)
-	
+
 	threads, _ := p.NumThreads()
 	createTime, _ := p.CreateTime()
-	
+
 	return &types.ProcessInfo{
 		PID:        p.Pid,
 		PPID:       ppid,
@@ -124,9 +124,9 @@ func GetTopProcesses(limit int) []*types.ProcessInfo {
 	if err != nil {
 		return nil
 	}
-	
+
 	var processInfos []*types.ProcessInfo
-	
+
 	for _, p := range processes {
 		if len(processInfos) >= 100 {
 			break
@@ -134,11 +134,11 @@ func GetTopProcesses(limit int) []*types.ProcessInfo {
 		info := GetProcessInfo(p)
 		processInfos = append(processInfos, info)
 	}
-	
+
 	sort.Slice(processInfos, func(i, j int) bool {
 		return processInfos[i].CPUPercent > processInfos[j].CPUPercent
 	})
-	
+
 	if len(processInfos) > limit {
 		return processInfos[:limit]
 	}
