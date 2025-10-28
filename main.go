@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/SwarnenduG07/wtop/ui"
@@ -19,8 +16,7 @@ func main() {
 
 	ui.ClearScreen()
 
-	resizeCh := make(chan os.Signal, 1)
-	signal.Notify(resizeCh, syscall.SIGWINCH)
+	resizeCh := setupResizeCh()
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
