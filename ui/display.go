@@ -1,6 +1,10 @@
 package ui
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
 
 const (
 	Reset  = "\033[0m"
@@ -35,44 +39,56 @@ func ClearScreen() {
 }
 
 func Repeat(s string, count int) string {
-	result := ""
-	for i := 0; i < count; i++ {
-		result += s
+	if count <= 0 {
+		return ""
 	}
-	return result
+	return strings.Repeat(s, count)
 }
 
 func DrawColorBar(percent float64, width int) string {
+	if width < 1 {
+		width = 1
+	}
 	filled := int(percent * float64(width) / 100)
 	if filled > width {
 		filled = width
 	}
-	
+
 	color := Green
 	if percent > 80 {
 		color = Red
 	} else if percent > 60 {
 		color = Yellow
 	}
-	
-	bar := "["
+
+	var builder strings.Builder
+	builder.Grow(width + 16)
+	builder.WriteByte('[')
 	for i := 0; i < width; i++ {
 		if i < filled {
-			bar += color + "█" + Reset
+			builder.WriteString(color)
+			builder.WriteRune('█')
+			builder.WriteString(Reset)
 		} else {
-			bar += " "
+			builder.WriteByte(' ')
 		}
 	}
-	bar += fmt.Sprintf("] %s%.1f%%%s", color, percent, Reset)
-	return bar
+	builder.WriteString("] ")
+	builder.WriteString(color)
+	builder.WriteString(fmt.Sprintf("%.1f%%", percent))
+	builder.WriteString(Reset)
+	return builder.String()
 }
 
 func DrawMemoryBar(percent float64, width int) string {
+	if width < 1 {
+		width = 1
+	}
 	filled := int(percent * float64(width) / 100)
 	if filled > width {
 		filled = width
 	}
-	
+
 	color := Green
 	if percent > 90 {
 		color = Red + Bold
@@ -81,15 +97,77 @@ func DrawMemoryBar(percent float64, width int) string {
 	} else if percent > 50 {
 		color = Yellow
 	}
-	
-	bar := "["
+
+	var builder strings.Builder
+	builder.Grow(width + 16)
+	builder.WriteByte('[')
 	for i := 0; i < width; i++ {
 		if i < filled {
-			bar += color + "█" + Reset
+			builder.WriteString(color)
+			builder.WriteRune('█')
+			builder.WriteString(Reset)
 		} else {
-			bar += " "
+			builder.WriteByte(' ')
 		}
 	}
-	bar += fmt.Sprintf("] %s%.1f%%%s", color, percent, Reset)
-	return bar
+	builder.WriteString("] ")
+	builder.WriteString(color)
+	builder.WriteString(fmt.Sprintf("%.1f%%", percent))
+	builder.WriteString(Reset)
+	return builder.String()
+}
+
+func FitString(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
+}
+
+func VisibleLength(s string) int {
+	count := 0
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) {
+				c := s[i]
+				if (c >= '0' && c <= '9') || c == ';' {
+					i++
+					continue
+				}
+				// Consume final byte of control sequence.
+				i++
+				break
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if size == 0 {
+			break
+		}
+		i += size
+		count++
+	}
+	return count
+}
+
+func FitPlainString(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return s
+	}
+	if width <= 3 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-3]) + "..."
 }
