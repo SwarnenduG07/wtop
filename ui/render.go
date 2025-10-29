@@ -46,6 +46,9 @@ type Dashboard struct {
 
 	root      *tview.Flex
 	topFlex   *tview.Flex
+	leftFlex  *tview.Flex
+	rightFlex *tview.Flex
+	mainFlex  *tview.Flex
 	header    *tview.TextView
 	lastRates netRates
 
@@ -125,11 +128,23 @@ func NewDashboard(theme Theme) *Dashboard {
 		AddItem(dash.cpuView, 0, 1, false).
 		AddItem(dash.memoryView, 0, 1, false)
 
+	// Create left side with GPU
+	dash.leftFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(dash.topFlex, 0, 2, false).
+		AddItem(dash.gpuView, 0, 3, false)
+
+	// Create right side with processes
+	dash.rightFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(dash.processTable, 0, 1, true)
+
+	// Main content area split between left and right
+	dash.mainFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(dash.leftFlex, 0, 1, false).
+		AddItem(dash.rightFlex, 0, 1, false)
+
 	dash.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(dash.header, 3, 0, false).
-		AddItem(dash.topFlex, 0, 3, false).
-		AddItem(dash.gpuView, 0, 2, false).
-		AddItem(dash.processTable, 0, 5, true).
+		AddItem(dash.mainFlex, 0, 1, false).
 		AddItem(dash.footer, 2, 0, false)
 
 	dash.root.SetBackgroundColor(dash.theme.Background)
@@ -372,10 +387,15 @@ func (d *Dashboard) reflowLayout(width int) {
 		d.topFlex.ResizeItem(d.memoryView, 0, 1)
 	}
 
-	if width < 90 {
-		d.root.ResizeItem(d.gpuView, 0, 1)
+	// For very narrow screens, stack left and right vertically
+	if width < 100 {
+		d.mainFlex.SetDirection(tview.FlexRow)
+		d.mainFlex.ResizeItem(d.leftFlex, 0, 2)
+		d.mainFlex.ResizeItem(d.rightFlex, 0, 3)
 	} else {
-		d.root.ResizeItem(d.gpuView, 0, 2)
+		d.mainFlex.SetDirection(tview.FlexColumn)
+		d.mainFlex.ResizeItem(d.leftFlex, 0, 1)
+		d.mainFlex.ResizeItem(d.rightFlex, 0, 1)
 	}
 
 	if width < 80 {
