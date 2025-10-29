@@ -44,13 +44,15 @@ type Dashboard struct {
 	app   *tview.Application
 	theme Theme
 
-	root      *tview.Flex
-	topFlex   *tview.Flex
-	leftFlex  *tview.Flex
-	rightFlex *tview.Flex
-	mainFlex  *tview.Flex
-	header    *tview.TextView
-	lastRates netRates
+	root        *tview.Flex
+	leftFlex    *tview.Flex
+	rightFlex   *tview.Flex
+	mainFlex    *tview.Flex
+	cpuFlex     *tview.Flex
+	memDiskFlex *tview.Flex
+	gpuFlex     *tview.Flex
+	header      *tview.TextView
+	lastRates   netRates
 
 	cpuView      *tview.TextView
 	memoryView   *tview.TextView
@@ -124,14 +126,23 @@ func NewDashboard(theme Theme) *Dashboard {
 		SetWrap(false)
 	dash.footer.SetBackgroundColor(dash.theme.FooterBackground)
 
-	dash.topFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(dash.cpuView, 0, 1, false).
+	// Create CPU row (full width)
+	dash.cpuFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(dash.cpuView, 0, 1, false)
+
+	// Create Memory and Disk side by side
+	dash.memDiskFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(dash.memoryView, 0, 1, false)
 
-	// Create left side with GPU
+	// Create GPU row (full width)
+	dash.gpuFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(dash.gpuView, 0, 1, false)
+
+	// Create left side: CPU, then Mem/Disk, then GPU
 	dash.leftFlex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(dash.topFlex, 0, 2, false).
-		AddItem(dash.gpuView, 0, 3, false)
+		AddItem(dash.cpuFlex, 0, 1, false).
+		AddItem(dash.memDiskFlex, 0, 1, false).
+		AddItem(dash.gpuFlex, 0, 2, false)
 
 	// Create right side with processes
 	dash.rightFlex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -376,16 +387,6 @@ func (d *Dashboard) reflowLayout(width int) {
 		return
 	}
 	d.lastLayoutWidth = width
-
-	if width < 120 {
-		d.topFlex.SetDirection(tview.FlexRow)
-		d.topFlex.ResizeItem(d.cpuView, 0, 1)
-		d.topFlex.ResizeItem(d.memoryView, 0, 1)
-	} else {
-		d.topFlex.SetDirection(tview.FlexColumn)
-		d.topFlex.ResizeItem(d.cpuView, 0, 1)
-		d.topFlex.ResizeItem(d.memoryView, 0, 1)
-	}
 
 	// For very narrow screens, stack left and right vertically
 	if width < 100 {
