@@ -2,63 +2,79 @@ package ui
 
 import (
 	"fmt"
-
-	"github.com/shirou/gopsutil/v3/mem"
+	"strings"
 )
 
-func RenderMemory(row *int, width int, limit int) {
-	if *row > limit {
-		return
-	}
-	v, err := mem.VirtualMemory()
-	if err != nil {
+func (d *Dashboard) updateMemory(snap *snapshot) {
+	if snap == nil || snap.Memory == nil {
+		d.memoryView.SetText("[yellow]Memory metrics unavailable[-]")
 		return
 	}
 
-	MoveCursor(*row, 1)
-	ClearLine()
-	fmt.Printf("%s MEMORY & SWAP:%s", Bold+Purple, Reset)
-	*row++
-	if *row > limit {
-		return
+	_, _, width, _ := d.memoryView.GetInnerRect()
+	if width <= 0 {
+		width = 60
+	}
+	barWidth := clampInt(width-20, 10, 60)
+	sparkWidth := clampInt(width-barWidth-12, 8, 40)
+
+	mem := snap.Memory
+	memSpark := ""
+	if d.memHistory != nil && sparkWidth >= 8 {
+		memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth, d.theme)
+	}
+	lines := []string{
+		fmt.Sprintf("Mem  %s%s  %s/%s",
+			renderUsageBar(mem.UsedPercent, barWidth, d.theme),
+			memSpark,
+			formatBytes(float64(mem.Used)),
+			formatBytes(float64(mem.Total))),
 	}
 
-	barWidth := width - 32
-	if barWidth < 10 {
-		barWidth = width / 2
-	}
-	if barWidth < 8 {
-		barWidth = 8
-	}
-
-	MoveCursor(*row, 1)
-	ClearLine()
-	fmt.Printf("%s  Mem:%s %s  %.1fG/%.1fG",
-		Bold+Purple, Reset,
-		DrawMemoryBar(v.UsedPercent, barWidth),
-		float64(v.Used)/1024/1024/1024,
-		float64(v.Total)/1024/1024/1024)
-	*row++
-	if *row > limit {
-		return
+	if snap.Swap != nil && snap.Swap.Total > 0 {
+		swapSpark := ""
+		if d.swapHistory != nil && sparkWidth >= 8 {
+			swapSpark = "  " + renderSparkline(d.swapHistory.Series(), sparkWidth, d.theme)
+		}
+		lines = append(lines, fmt.Sprintf("Swap %s  %s/%s",
+			renderUsageBar(snap.Swap.UsedPercent, barWidth, d.theme)+swapSpark,
+			formatBytes(float64(snap.Swap.Used)),
+			formatBytes(float64(snap.Swap.Total))))
 	}
 
-	swap, _ := mem.SwapMemory()
-	if swap.Total > 0 {
-		MoveCursor(*row, 1)
-		ClearLine()
-		fmt.Printf(
-			"%s  Swp:%s %s  %.1fG/%.1fG",
-			Bold+Purple, Reset,
-			DrawMemoryBar(swap.UsedPercent, barWidth),
-			float64(swap.Used)/1024/1024/1024,
-			float64(swap.Total)/1024/1024/1024,
-		)
-		*row++
-		if *row > limit {
-			return
+	if snap.Disk != nil && snap.Disk.Total > 0 {
+		diskPercent := (float64(snap.Disk.Used) / float64(snap.Disk.Total)) * 100
+		diskSpark := ""
+		if d.diskHistory != nil && sparkWidth >= 8 {
+			diskSpark = "  " + renderSparkline(d.diskHistory.Series(), sparkWidth, d.theme)
+		}
+		lines = append(lines, fmt.Sprintf("Disk %s  %s/%s (%s)",
+			renderUsageBar(diskPercent, barWidth, d.theme)+diskSpark,
+			formatBytes(float64(snap.Disk.Used)),
+			formatBytes(float64(snap.Disk.Total)),
+			snap.DiskPath))
+	}
+
+	if snap.ProcessSummary.Total > 0 {
+		lines = append(lines, fmt.Sprintf("Tasks %d  Threads %d  Running %d",
+			snap.ProcessSummary.Total,
+			snap.ProcessSummary.Threads,
+			snap.ProcessSummary.Running))
+	}
+
+	if width >= 48 {
+		extra := []string{}
+		extra = append(extra, fmt.Sprintf("Avail %s", formatBytes(float64(mem.Available))))
+		if mem.Cached > 0 {
+			extra = append(extra, fmt.Sprintf("Cached %s", formatBytes(float64(mem.Cached))))
+		}
+		if mem.Buffers > 0 {
+			extra = append(extra, fmt.Sprintf("Buffers %s", formatBytes(float64(mem.Buffers))))
+		}
+		if len(extra) > 0 {
+			lines = append(lines, strings.Join(extra, "  "))
 		}
 	}
 
-	*row++
+	d.memoryView.SetText(strings.Join(lines, "\n"))
 }
