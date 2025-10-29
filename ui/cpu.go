@@ -2,123 +2,83 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
-
-	"github.com/shirou/gopsutil/v3/cpu"
 )
 
-func RenderCPU(row *int, width int, limit int) {
-	if *row > limit {
-		return
-	}
-	cpuPercents, err := cpu.Percent(0, true)
-	if err != nil || len(cpuPercents) == 0 {
+func (d *Dashboard) updateCPU(snap *snapshot) {
+	if snap == nil || len(snap.CPUPerCore) == 0 {
+		d.cpuView.SetText("[yellow]CPU metrics unavailable[-]")
 		return
 	}
 
-	MoveCursor(*row, 1)
-	ClearLine()
-	fmt.Printf("%s CPU USAGE:%s", Bold+Cyan, Reset)
-	*row++
-	if *row > limit {
-		return
+	_, _, width, _ := d.cpuView.GetInnerRect()
+	if width <= 0 {
+		width = 80
 	}
+	totalBarWidth := clampInt(width-30, 12, 60)
+	totalBar := renderUsageBar(snap.TotalCPU, totalBarWidth, d.theme)
+	totalSpark := ""
+	sparkWidth := clampInt(width-totalBarWidth-12, 8, 40)
+	if d.cpuHistory != nil && sparkWidth >= 8 {
+		totalSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth, d.theme)
+	}
+	totalLine := fmt.Sprintf("Total %s%s", totalBar, totalSpark)
 
-	coresPerRow := 1
-	switch {
-	case width >= 140:
-		coresPerRow = 4
-	case width >= 110:
-		coresPerRow = 3
-	case width >= 80:
-		coresPerRow = 2
-	}
-	if coresPerRow > len(cpuPercents) {
-		coresPerRow = len(cpuPercents)
-	}
-	if coresPerRow == 0 {
-		coresPerRow = 1
-	}
+	cores := snap.CPUPerCore
+	coresPerRow := determineCoresPerRow(width, len(cores))
+	barWidth := computeBarWidth(width, coresPerRow)
 
-	barWidth := width/coresPerRow - 18
-	if barWidth < 3 {
-		barWidth = 3
-	}
-	if barWidth > width-12 {
-		barWidth = width - 12
-	}
+	var lines []string
+	lines = append(lines, totalLine)
 
-	availableRows := limit - *row + 1
-	if availableRows <= 0 {
-		return
-	}
-
-	maxLines := (len(cpuPercents) + coresPerRow - 1) / coresPerRow
-	if maxLines > availableRows {
-		maxLines = availableRows
-	}
-	maxCores := maxLines * coresPerRow
-	if maxCores > len(cpuPercents) {
-		maxCores = len(cpuPercents)
-	}
-
-	for i := 0; i < maxCores; i += coresPerRow {
-		if *row > limit {
-			break
-		}
-		MoveCursor(*row, 1)
-		ClearLine()
-
-		var line strings.Builder
+	for i := 0; i < len(cores); i += coresPerRow {
+		var builder strings.Builder
 		for j := 0; j < coresPerRow; j++ {
-			coreIdx := i + j
-			if coreIdx >= maxCores {
+			idx := i + j
+			if idx >= len(cores) {
 				break
 			}
-			if line.Len() > 0 {
-				line.WriteString("  ")
+			if builder.Len() > 0 {
+				builder.WriteString("  ")
 			}
-			label := fmt.Sprintf("%s%2d%s", Bold+Cyan, coreIdx+1, Reset)
-			line.WriteString(label)
-			line.WriteByte(' ')
-			line.WriteString(DrawColorBar(cpuPercents[coreIdx], barWidth))
+			label := fmt.Sprintf("%sC%02d%s", colorTag(d.theme.Accent), idx+1, resetTag())
+			builder.WriteString(label)
+			builder.WriteByte(' ')
+			builder.WriteString(renderUsageBar(cores[idx], barWidth, d.theme))
 		}
-
-		output := line.String()
-		if VisibleLength(output) > width {
-			// Reduce bar width and rebuild if we exceeded the width budget.
-			adjustedWidth := width/coresPerRow - 18
-			if adjustedWidth < 3 {
-				adjustedWidth = 3
-			}
-			for {
-				line.Reset()
-				for j := 0; j < coresPerRow; j++ {
-					coreIdx := i + j
-					if coreIdx >= maxCores {
-						break
-					}
-					if line.Len() > 0 {
-						line.WriteString("  ")
-					}
-					label := fmt.Sprintf("%s%2d%s", Bold+Cyan, coreIdx+1, Reset)
-					line.WriteString(label)
-					line.WriteByte(' ')
-					line.WriteString(DrawColorBar(cpuPercents[coreIdx], adjustedWidth))
-				}
-				output = line.String()
-				if VisibleLength(output) <= width || adjustedWidth <= 3 {
-					break
-				}
-				adjustedWidth--
-			}
-		}
-
-		fmt.Print(output)
-		*row++
+		lines = append(lines, builder.String())
 	}
 
-	if *row <= limit {
-		*row++
+	d.cpuView.SetText(strings.Join(lines, "\n"))
+}
+
+func determineCoresPerRow(width int, total int) int {
+	if total <= 0 {
+		return 1
 	}
+	switch {
+	case width >= 120 && total >= 4:
+		return int(math.Min(4, float64(total)))
+	case width >= 90 && total >= 3:
+		return int(math.Min(3, float64(total)))
+	case width >= 60 && total >= 2:
+		return int(math.Min(2, float64(total)))
+	default:
+		return 1
+	}
+}
+
+func computeBarWidth(width, coresPerRow int) int {
+	if coresPerRow <= 0 {
+		coresPerRow = 1
+	}
+	raw := (width / coresPerRow) - 10
+	if raw < 6 {
+		raw = 6
+	}
+	if raw > 60 {
+		raw = 60
+	}
+	return raw
 }
