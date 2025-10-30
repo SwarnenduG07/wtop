@@ -138,7 +138,7 @@ func collectProcessSummary() processSummary {
 
 func primaryDiskPath() string {
 	if runtime.GOOS == "windows" {
-		return "C:"
+		return "C:\\"
 	}
 	return "/"
 }
