@@ -18,6 +18,23 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 		width = 120
 	}
 
+	// Build a map of PID -> GPU info (gpu index and memory used) so we can mark
+	// processes that have GPU attachments in the main process table.
+	gpuMap := map[int]struct {
+		Index int
+		Mem   float64
+	}{}
+	if snap != nil && snap.GPUProcesses != nil {
+		for gidx, procs := range snap.GPUProcesses {
+			for _, p := range procs {
+				gpuMap[p.PID] = struct {
+					Index int
+					Mem   float64
+				}{Index: gidx, Mem: p.MemoryUsed}
+			}
+		}
+	}
+
 	type columnDef struct {
 		header string
 		cell   func(*types.ProcessInfo) *tview.TableCell
@@ -56,6 +73,19 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			},
 		},
 		{
+			header: "GPU",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				// check gpuMap for this PID
+				pid := int(info.PID)
+				if g, ok := gpuMap[pid]; ok {
+					return tview.NewTableCell(fmt.Sprintf("%d:%.0fMB", g.Index, g.Mem)).
+						SetAlign(tview.AlignRight).
+						SetTextColor(d.theme.Accent)
+				}
+				return tview.NewTableCell("").SetTextColor(d.theme.Muted)
+			},
+		},
+		{
 			header: "STATE",
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(info.Status).
@@ -63,6 +93,29 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 					SetTextColor(d.theme.Muted)
 			},
 		},
+	}
+
+	// If wide enough, show GPU column indicating GPU index and memory used
+	if width >= 100 {
+		columns = append(columns, columnDef{
+			header: "GPU",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				if snap == nil || snap.GPUProcesses == nil {
+					return tview.NewTableCell("")
+				}
+				pid := int(info.PID)
+				for gpuIdx, procs := range snap.GPUProcesses {
+					for _, p := range procs {
+						if p.PID == pid {
+							return tview.NewTableCell(fmt.Sprintf("G%d:%4.0fMB", gpuIdx, p.MemoryUsed)).
+								SetAlign(tview.AlignRight).
+								SetTextColor(d.theme.Accent)
+						}
+					}
+				}
+				return tview.NewTableCell("")
+			},
+		})
 	}
 
 	if width >= 90 {
@@ -132,7 +185,11 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 		columnDef{
 			header: "COMMAND",
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
-				return tview.NewTableCell(truncateLabel(info.Name, cmdWidth)).
+				command := info.Command
+				if command == "" {
+					command = info.Name
+				}
+				return tview.NewTableCell(truncateLabel(command, cmdWidth)).
 					SetTextColor(d.theme.Foreground)
 			},
 		})
