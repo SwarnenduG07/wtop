@@ -56,6 +56,7 @@ type Dashboard struct {
 
 	cpuView      *tview.TextView
 	memoryView   *tview.TextView
+	diskView     *tview.TextView
 	gpuView      *tview.TextView
 	processTable *tview.Table
 	footer       *tview.TextView
@@ -101,8 +102,11 @@ func NewDashboard(theme Theme) *Dashboard {
 	dash.cpuView = dash.newSection(" CPU ")
 	dash.cpuView.SetWrap(false)
 
-	dash.memoryView = dash.newSection(" MEMORY / DISK ")
+	dash.memoryView = dash.newSection(" MEMORY ")
 	dash.memoryView.SetWrap(false)
+
+	dash.diskView = dash.newSection(" DISKS ")
+	dash.diskView.SetWrap(false)
 
 	dash.gpuView = dash.newSection(" GPU ")
 	dash.gpuView.SetWrap(false)
@@ -132,7 +136,8 @@ func NewDashboard(theme Theme) *Dashboard {
 
 	// Create Memory and Disk side by side
 	dash.memDiskFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(dash.memoryView, 0, 1, false)
+		AddItem(dash.memoryView, 0, 1, false).
+		AddItem(dash.diskView, 0, 1, false)
 
 	// Create GPU row (full width)
 	dash.gpuFlex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -162,6 +167,7 @@ func NewDashboard(theme Theme) *Dashboard {
 	dash.header.SetBackgroundColor(dash.theme.Background)
 	dash.cpuView.SetBackgroundColor(dash.theme.Background)
 	dash.memoryView.SetBackgroundColor(dash.theme.Background)
+	dash.diskView.SetBackgroundColor(dash.theme.Background)
 	dash.gpuView.SetBackgroundColor(dash.theme.Background)
 
 	dash.cpuHistory = newSparkHistory(historySize)
@@ -308,8 +314,14 @@ func (d *Dashboard) computeNetworkRates(snap *snapshot, fromLoop bool) netRates 
 		return netRates{Valid: false}
 	}
 
-	up := float64(snap.NetBytesSent-d.prevNetSent) / elapsed
-	down := float64(snap.NetBytesRecv-d.prevNetRecv) / elapsed
+	up := 0.0
+	if snap.NetBytesSent >= d.prevNetSent {
+		up = float64(snap.NetBytesSent-d.prevNetSent) / elapsed
+	}
+	down := 0.0
+	if snap.NetBytesRecv >= d.prevNetRecv {
+		down = float64(snap.NetBytesRecv-d.prevNetRecv) / elapsed
+	}
 
 	d.prevNetSent = snap.NetBytesSent
 	d.prevNetRecv = snap.NetBytesRecv
