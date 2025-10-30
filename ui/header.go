@@ -68,7 +68,7 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 	if snap.Swap != nil && snap.Swap.Total > 0 {
 		swapBar := renderUsageBar(snap.Swap.UsedPercent, clampInt(cpuBarWidth, 10, 30), d.theme)
 		partsLineTwo = append(partsLineTwo,
-			fmt.Sprintf("� SWP %s %s/%s",
+			fmt.Sprintf("🔄 SWP %s %s/%s",
 				swapBar,
 				formatBytes(float64(snap.Swap.Used)),
 				formatBytes(float64(snap.Swap.Total))))
