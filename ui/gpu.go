@@ -28,7 +28,7 @@ func (d *Dashboard) updateGPU(snap *snapshot) {
 		if driver == "" {
 			driver = "Unknown"
 		}
-		headerLine := fmt.Sprintf("  [%d] %s (Driver: %s)", gpu.Index, gpu.Name, driver)
+		headerLine := fmt.Sprintf("  [[%d]] %s (Driver: %s)", gpu.Index, gpu.Name, driver)
 		lines = append(lines, headerLine)
 
 		// P-State, Compute, Bus, PCIe line
@@ -122,22 +122,34 @@ func (d *Dashboard) updateGPU(snap *snapshot) {
 			lines = append(lines, "  Throttle: None")
 		}
 
-		// GPU Processes
+		// GPU Processes - render as a compact table with totals
 		if snap.GPUProcesses != nil {
 			if procs := snap.GPUProcesses[gpu.Index]; len(procs) > 0 {
 				lines = append(lines, "  GPU Processes:")
+
+				// Header
+				lines = append(lines, fmt.Sprintf("    %-6s  %-25s  %-8s  %6s", "PID", "Process", "Type", "Mem"))
+
+				totalProcMem := 0.0
 				for _, proc := range procs {
 					procType := strings.TrimSpace(proc.Type)
 					if procType == "" {
 						procType = "Compute"
 					}
-					procLine := fmt.Sprintf("    PID: %-6d    %-25s  [%s]  Mem: %.0fMB",
+					name := truncateLabel(proc.ProcessName, 25)
+					memMB := proc.MemoryUsed
+					totalProcMem += memMB
+					procLine := fmt.Sprintf("    %-6d  %-25s  %-8s  %6.0fMB",
 						proc.PID,
-						truncateLabel(proc.ProcessName, 25),
+						name,
 						procType,
-						proc.MemoryUsed)
+						memMB)
 					lines = append(lines, procLine)
 				}
+
+				// Summary of process memory usage
+				lines = append(lines, fmt.Sprintf("    Processes: %d  Total GPU Mem: %.0fMB",
+					len(procs), totalProcMem))
 			}
 		}
 
