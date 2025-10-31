@@ -23,9 +23,6 @@ func (d *Dashboard) bindKeys() {
 			case 's', 'S':
 				d.cycleSortMode()
 				return nil
-			case 't', 'T':
-				d.toggleTheme()
-				return nil
 			case '/':
 				d.footer.SetText("[yellow]Process filtering not implemented yet[-]")
 				return nil
