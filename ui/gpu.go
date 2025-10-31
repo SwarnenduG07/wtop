@@ -2,12 +2,193 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/SwarnenduG07/wtop/metrics"
 )
 
-func formatFan(g *metrics.GPUInfo) string {
+func (d *Dashboard) updateGPU(snap *snapshot) {
+	if snap == nil || len(snap.GPUInfos) == 0 {
+		d.gpuView.SetText("[gray]No discrete GPU detected[-]")
+		return
+	}
+
+	_, _, width, _ := d.gpuView.GetInnerRect()
+	if width <= 0 {
+		width = 80
+	}
+
+	var lines []string
+
+	for _, gpu := range snap.GPUInfos {
+		// Header line: [index] GPU Name (Driver: version)
+		driver := strings.TrimSpace(gpu.Driver)
+		if driver == "" {
+			driver = "Unknown"
+		}
+		headerLine := fmt.Sprintf("  [[%d]] %s (Driver: %s)", gpu.Index, gpu.Name, driver)
+		lines = append(lines, headerLine)
+
+		// P-State, Compute, Bus, PCIe line
+		stateParts := []string{}
+
+		// P-State
+		pstate := strings.TrimSpace(gpu.PerformanceState)
+		if pstate == "" {
+			pstate = strings.TrimSpace(gpu.PowerState)
+		}
+		if pstate != "" && pstate != "[N/A]" && pstate != "[Unknown]" {
+			stateParts = append(stateParts, fmt.Sprintf("P-State: %s", pstate))
+		}
+
+		// Compute Mode
+		computeMode := strings.TrimSpace(gpu.ComputeMode)
+		if computeMode != "" && computeMode != "[N/A]" {
+			stateParts = append(stateParts, fmt.Sprintf("Compute: %s", computeMode))
+		}
+
+		// Memory Bus Width
+		if gpu.MemoryBusWidth > 0 {
+			stateParts = append(stateParts, fmt.Sprintf("Bus: %d-bit", gpu.MemoryBusWidth))
+		}
+
+		// PCIe
+		if gpu.PCIeGen > 0 && gpu.PCIeWidth > 0 {
+			stateParts = append(stateParts, fmt.Sprintf("PCIe: Gen%d x%d", gpu.PCIeGen, gpu.PCIeWidth))
+		}
+
+		if len(stateParts) > 0 {
+			lines = append(lines, "  "+strings.Join(stateParts, "  "))
+		}
+
+		// GPU and Memory bars line
+		gpuBar := renderBtopBar(gpu.Utilization, 15)
+		memPercent := 0.0
+		if gpu.MemoryTotal > 0 {
+			memPercent = (gpu.MemoryUsed / gpu.MemoryTotal) * 100
+		}
+		memBar := renderBtopBar(memPercent, 15)
+		usedGB := gpu.MemoryUsed / 1024
+		totalGB := gpu.MemoryTotal / 1024
+		memUsage := fmt.Sprintf("%.1fG/%.1fG", usedGB, totalGB)
+		gpuMemLine := fmt.Sprintf("  GPU: %s %.1f%%  Mem: %s %.1f%% %s",
+			gpuBar, gpu.Utilization, memBar, memPercent, memUsage)
+		lines = append(lines, gpuMemLine)
+
+		// Memory Controller and SM clock line
+		memCtrlBar := renderBtopBar(gpu.MemoryUtilization, 15)
+		smClock := ""
+		if gpu.ClockSM > 0 {
+			smClock = fmt.Sprintf("SM: %dMHz", gpu.ClockSM)
+		}
+		memCtrlLine := fmt.Sprintf("  Mem Ctrl: %s %.1f%%  %s", memCtrlBar, gpu.MemoryUtilization, smClock)
+		lines = append(lines, memCtrlLine)
+
+		// Temperature bar with Power and Fan
+		tempBar := renderBtopBar(gpu.Temperature, 15)
+		tempLine := fmt.Sprintf("  Temp: %s %.0f°C", tempBar, gpu.Temperature)
+
+		powerInfo := formatGPUPower(gpu)
+		if powerInfo != "Power N/A" {
+			tempLine += fmt.Sprintf("  %s", powerInfo)
+		}
+
+		fanInfo := formatGPUFan(gpu)
+		if fanInfo != "Off" {
+			tempLine += fmt.Sprintf("  Fan: %s", fanInfo)
+		}
+
+		lines = append(lines, tempLine)
+
+		// Clocks line
+		clockInfo := formatGPUClocks(gpu)
+		if clockInfo != "Clock N/A" {
+			lines = append(lines, fmt.Sprintf("  %s", clockInfo))
+		}
+
+		// Throttle line
+		throttleReasons := formatGPUThrottle(gpu.ThrottleReasons)
+		if throttleReasons != "" {
+			lines = append(lines, fmt.Sprintf("  Throttle: %s", throttleReasons))
+		} else {
+			lines = append(lines, "  Throttle: None")
+		}
+
+		// GPU Processes - render as a compact table with totals
+		if snap.GPUProcesses != nil {
+			if procs := snap.GPUProcesses[gpu.Index]; len(procs) > 0 {
+				lines = append(lines, "  GPU Processes:")
+
+				// Header
+				lines = append(lines, fmt.Sprintf("    %-6s  %-25s  %-8s  %6s", "PID", "Process", "Type", "Mem"))
+
+				totalProcMem := 0.0
+				for _, proc := range procs {
+					procType := strings.TrimSpace(proc.Type)
+					if procType == "" {
+						procType = "Compute"
+					}
+					name := truncateLabel(proc.ProcessName, 25)
+					memMB := proc.MemoryUsed
+					totalProcMem += memMB
+					procLine := fmt.Sprintf("    %-6d  %-25s  %-8s  %6.0fMB",
+						proc.PID,
+						name,
+						procType,
+						memMB)
+					lines = append(lines, procLine)
+				}
+
+				// Summary of process memory usage
+				lines = append(lines, fmt.Sprintf("    Processes: %d  Total GPU Mem: %.0fMB",
+					len(procs), totalProcMem))
+			}
+		}
+
+		lines = append(lines, "")
+	}
+
+	d.gpuView.SetText(strings.TrimSpace(strings.Join(lines, "\n")))
+}
+
+func truncateLabel(value string, max int) string {
+	if len(value) <= max {
+		return value
+	}
+	if max <= 3 {
+		return value[:max]
+	}
+	return value[:max-3] + "..."
+}
+
+func renderBtopBar(value float64, width int) string {
+	width = clampInt(width, 6, 60)
+
+	// For temperature, scale to 0-100 range (assuming 100°C max)
+	if value > 100 {
+		value = 100
+	}
+
+	filled := int(math.Round(value / 100 * float64(width)))
+	if filled > width {
+		filled = width
+	}
+
+	var b strings.Builder
+	b.WriteString("[")
+	for i := 0; i < width; i++ {
+		if i < filled {
+			b.WriteRune('█')
+		} else {
+			b.WriteRune(' ')
+		}
+	}
+	b.WriteString("]")
+	return b.String()
+}
+
+func formatGPUFan(g *metrics.GPUInfo) string {
 	if g.FanRPM > 0 {
 		return fmt.Sprintf("%d RPM", g.FanRPM)
 	}
@@ -17,17 +198,7 @@ func formatFan(g *metrics.GPUInfo) string {
 	return "Off"
 }
 
-func formatPower(g *metrics.GPUInfo) string {
-	if g.PowerUsage <= 0 {
-		return "N/A"
-	}
-	if g.PowerLimit > 0 {
-		return fmt.Sprintf("%.0f/%.0fW", g.PowerUsage, g.PowerLimit)
-	}
-	return fmt.Sprintf("%.0fW", g.PowerUsage)
-}
-
-func formatThrottle(reasons []string) string {
+func formatGPUThrottle(reasons []string) string {
 	filtered := make([]string, 0, len(reasons))
 	for _, reason := range reasons {
 		reason = strings.TrimSpace(reason)
@@ -36,159 +207,22 @@ func formatThrottle(reasons []string) string {
 		}
 		filtered = append(filtered, reason)
 	}
-	if len(filtered) == 0 {
-		return ""
-	}
 	return strings.Join(filtered, ", ")
 }
 
-func RenderGPU(row *int, width int, limit int) {
-	if *row > limit {
-		return
+func formatGPUPower(g *metrics.GPUInfo) string {
+	if g.PowerLimit > 0 {
+		return fmt.Sprintf("Power %.0f/%.0fW", g.PowerUsage, g.PowerLimit)
 	}
-	gpus, _ := metrics.GetGPUInfo()
-	if len(gpus) > 0 {
-
-		MoveCursor(*row, 1)
-		ClearLine()
-		fmt.Printf("%s GPU:%s", Bold+Blue, Reset)
-		*row++
-		if *row > limit {
-			return
-		}
-
-		nameWidth := width - 46
-		if nameWidth < 12 {
-			nameWidth = 12
-		}
-
-		for _, gpu := range gpus {
-			if *row > limit {
-				break
-			}
-
-			MoveCursor(*row, 1)
-			ClearLine()
-
-			name := FitString(gpu.Name, nameWidth)
-			memPercent := 0.0
-			if gpu.MemoryTotal > 0 {
-				memPercent = (gpu.MemoryUsed / gpu.MemoryTotal) * 100
-			}
-
-			line := fmt.Sprintf("  %s[%d]%s %-*s",
-				Bold+Blue, gpu.Index, Reset, nameWidth, name)
-			segments := []string{
-				fmt.Sprintf(" %sUtil:%s %5.1f%%", Bold+Blue, Reset, gpu.Utilization),
-				fmt.Sprintf(" %sMem:%s %5.1f%%", Bold+Blue, Reset, memPercent),
-			}
-			for _, seg := range segments {
-				if VisibleLength(line+seg) > width {
-					break
-				}
-				line += seg
-			}
-			fmt.Print(line)
-			*row++
-			if *row > limit {
-				break
-			}
-
-			MoveCursor(*row, 1)
-			ClearLine()
-			usedGB := gpu.MemoryUsed / 1024
-			totalGB := gpu.MemoryTotal / 1024
-			line = fmt.Sprintf("    %sTemp:%s %5.1f°C", Bold+Blue, Reset, gpu.Temperature)
-			details := []string{
-				fmt.Sprintf(" %sFan:%s %s", Bold+Blue, Reset, formatFan(gpu)),
-				fmt.Sprintf(" %sPower:%s %s", Bold+Blue, Reset, formatPower(gpu)),
-				fmt.Sprintf(" %sClock:%s %d/%dMHz", Bold+Blue, Reset, gpu.ClockCore, gpu.ClockMemory),
-				fmt.Sprintf(" %sMem:%s %.1f/%.1fG", Bold+Blue, Reset, usedGB, totalGB),
-			}
-			for _, seg := range details {
-				if VisibleLength(line+seg) > width {
-					break
-				}
-				line += seg
-			}
-			fmt.Print(line)
-			*row++
-			if *row > limit {
-				break
-			}
-
-			throttle := formatThrottle(gpu.ThrottleReasons)
-			if throttle != "" {
-				MoveCursor(*row, 1)
-				ClearLine()
-				trimmed := FitString(throttle, width-20)
-				throttleLine := fmt.Sprintf("    %sThrottle:%s %s%s%s",
-					Bold+Blue, Reset, Yellow, trimmed, Reset)
-				fmt.Print(throttleLine)
-				*row++
-				if *row > limit {
-					break
-				}
-			}
-
-			if width >= 100 && *row <= limit {
-				processes, err := metrics.GetGPUProcesses(gpu.Index)
-				if err == nil && len(processes) > 0 {
-					MoveCursor(*row, 1)
-					ClearLine()
-					fmt.Printf("    %sProcesses:%s", Bold+Yellow, Reset)
-					*row++
-					if *row > limit {
-						break
-					}
-					maxRows := limit - *row + 1
-					if maxRows > 3 {
-						maxRows = 3
-					}
-					for i := 0; i < len(processes) && i < maxRows; i++ {
-						proc := processes[i]
-						MoveCursor(*row, 1)
-						ClearLine()
-						nameWidth := width - 40
-						if nameWidth < 10 {
-							nameWidth = 10
-						}
-						procName := FitString(proc.ProcessName, nameWidth)
-						fmt.Printf("      %sPID:%s %-6d %sMem:%s %5.0fMB %-*s",
-							Yellow, Reset, proc.PID,
-							Yellow, Reset, proc.MemoryUsed,
-							nameWidth, procName)
-						*row++
-						if *row > limit {
-							break
-						}
-					}
-				}
-			}
-
-			if *row <= limit {
-				*row++
-			}
-		}
-
+	if g.PowerUsage > 0 {
+		return fmt.Sprintf("Power %.0fW", g.PowerUsage)
 	}
+	return "Power N/A"
+}
 
-	if *row > limit {
-		return
+func formatGPUClocks(g *metrics.GPUInfo) string {
+	if g.ClockCore > 0 || g.ClockMemory > 0 {
+		return fmt.Sprintf("Clock %d/%d MHz", g.ClockCore, g.ClockMemory)
 	}
-
-	intelGPU, err := metrics.GetIntelGPU()
-	if err == nil && intelGPU != nil {
-		MoveCursor(*row, 1)
-		ClearLine()
-		fmt.Printf("%s Integrated GPU:%s", Bold+Blue, Reset)
-		*row++
-		if *row > limit {
-			return
-		}
-		MoveCursor(*row, 1)
-		ClearLine()
-		fmt.Printf("  %s%s%s", Green, FitString(intelGPU.Name, width-6), Reset)
-		*row++
-	}
+	return "Clock N/A"
 }

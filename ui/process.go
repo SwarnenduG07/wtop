@@ -2,201 +2,260 @@ package ui
 
 import (
 	"fmt"
-	"time"
+	"sort"
 
-	"github.com/SwarnenduG07/wtop/metrics"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/SwarnenduG07/wtop/types"
 )
 
-func formatTime(seconds int64) string {
-	if seconds < 60 {
-		return fmt.Sprintf("0:%02d.00", seconds)
-	}
-	minutes := seconds / 60
-	secs := seconds % 60
-	if minutes < 60 {
-		return fmt.Sprintf("%d:%02d.00", minutes, secs)
-	}
-	hours := minutes / 60
-	mins := minutes % 60
-	return fmt.Sprintf("%d:%02d:%02d", hours, mins, secs)
-}
+func (d *Dashboard) updateProcessTable(snap *snapshot) {
+	table := d.processTable
+	table.Clear()
 
-func formatBytesMB(value uint64) string {
-	return fmt.Sprintf("%.0fM", float64(value)/1024/1024)
-}
-
-func RenderProcessTable(row *int, width int, limit int) {
-	if *row > limit {
-		return
-	}
-	availableRows := limit - *row + 1
-	if availableRows <= 3 {
-		return
+	_, _, width, _ := table.GetInnerRect()
+	if width <= 0 {
+		width = 120
 	}
 
-	layout := "wide"
-	nameWidth := width - 72
-	userWidth := 9
-
-	switch {
-	case width >= 120 && nameWidth >= 14:
-		layout = "wide"
-	case width >= 100:
-		layout = "medium"
-		nameWidth = width - 40
-		userWidth = 9
-	case width >= 70:
-		layout = "compact"
-		nameWidth = width - 30
-		userWidth = 8
-	case width >= 46:
-		layout = "minimal"
-		nameWidth = width - 18
-	default:
-		MoveCursor(*row, 1)
-		ClearLine()
-		fmt.Printf("%sResize window to view process table%s", Yellow, Reset)
-		*row++
-		return
-	}
-
-	if nameWidth < 8 {
-		nameWidth = 8
-	}
-
-	MoveCursor(*row, 1)
-	ClearLine()
-	var header string
-	switch layout {
-	case "wide":
-		header = "  PID USER      PRI  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND"
-	case "medium":
-		header = "  PID USER      S  %CPU %MEM     TIME+ COMMAND"
-	case "compact":
-		header = "  PID USER   S %CPU %MEM COMMAND"
-	case "minimal":
-		header = "  PID %CPU %MEM COMMAND"
-	}
-	if VisibleLength(header) > width {
-		header = FitString(header, width)
-	}
-	fmt.Printf("%s%s%s", Bold+White, header, Reset)
-	*row++
-	if *row > limit {
-		return
-	}
-
-	maxRows := limit - *row + 1
-	processInfos := metrics.GetTopProcesses(maxRows)
-	currentTime := time.Now().Unix()
-
-	for _, info := range processInfos {
-		if *row > limit {
-			break
-		}
-		MoveCursor(*row, 1)
-		ClearLine()
-
-		user := FitString(info.User, userWidth)
-		name := FitString(info.Name, nameWidth)
-		runtime := currentTime - info.CreateTime/1000
-		if runtime < 0 {
-			runtime = 0
-		}
-		timeStr := formatTime(runtime)
-
-		line := ""
-		switch layout {
-		case "wide":
-			virt := formatBytesMB(info.VirtMem)
-			res := formatBytesMB(info.ResMem)
-			shr := formatBytesMB(info.ShrMem)
-			line = fmt.Sprintf("%s%5d%s %-*s %3d %3d %7s %7s %7s %-1s %6.1f %6.1f %9s %-*s",
-				Green, info.PID, Reset,
-				userWidth, user,
-				info.Priority,
-				info.Nice,
-				virt,
-				res,
-				shr,
-				info.Status,
-				info.CPUPercent,
-				info.MemPercent,
-				timeStr,
-				nameWidth, name)
-		case "medium":
-			line = fmt.Sprintf("%s%5d%s %-*s %-1s %6.1f %6.1f %9s %-*s",
-				Green, info.PID, Reset,
-				userWidth, user,
-				info.Status,
-				info.CPUPercent,
-				info.MemPercent,
-				timeStr,
-				nameWidth, name)
-		case "compact":
-			line = fmt.Sprintf("%s%5d%s %-*s %-1s %5.1f %5.1f %-*s",
-				Green, info.PID, Reset,
-				userWidth, user,
-				info.Status,
-				info.CPUPercent,
-				info.MemPercent,
-				nameWidth, name)
-		case "minimal":
-			line = fmt.Sprintf("%s%5d%s %5.1f %5.1f %-*s",
-				Green, info.PID, Reset,
-				info.CPUPercent,
-				info.MemPercent,
-				nameWidth, name)
-		}
-
-		if VisibleLength(line) > width {
-			trimWidth := nameWidth
-			for VisibleLength(line) > width && trimWidth > 4 {
-				trimWidth--
-				name = FitString(info.Name, trimWidth)
-				switch layout {
-				case "wide":
-					line = fmt.Sprintf("%s%5d%s %-*s %3d %3d %7s %7s %7s %-1s %6.1f %6.1f %9s %-*s",
-						Green, info.PID, Reset,
-						userWidth, user,
-						info.Priority,
-						info.Nice,
-						formatBytesMB(info.VirtMem),
-						formatBytesMB(info.ResMem),
-						formatBytesMB(info.ShrMem),
-						info.Status,
-						info.CPUPercent,
-						info.MemPercent,
-						timeStr,
-						trimWidth, name)
-				case "medium":
-					line = fmt.Sprintf("%s%5d%s %-*s %-1s %6.1f %6.1f %9s %-*s",
-						Green, info.PID, Reset,
-						userWidth, user,
-						info.Status,
-						info.CPUPercent,
-						info.MemPercent,
-						timeStr,
-						trimWidth, name)
-				case "compact":
-					line = fmt.Sprintf("%s%5d%s %-*s %-1s %5.1f %5.1f %-*s",
-						Green, info.PID, Reset,
-						userWidth, user,
-						info.Status,
-						info.CPUPercent,
-						info.MemPercent,
-						trimWidth, name)
-				case "minimal":
-					line = fmt.Sprintf("%s%5d%s %5.1f %5.1f %-*s",
-						Green, info.PID, Reset,
-						info.CPUPercent,
-						info.MemPercent,
-						trimWidth, name)
-				}
+	// Build a map of PID -> GPU info (gpu index and memory used) so we can mark
+	// processes that have GPU attachments in the main process table.
+	gpuMap := map[int]struct {
+		Index int
+		Mem   float64
+	}{}
+	if snap != nil && snap.GPUProcesses != nil {
+		for gidx, procs := range snap.GPUProcesses {
+			for _, p := range procs {
+				gpuMap[p.PID] = struct {
+					Index int
+					Mem   float64
+				}{Index: gidx, Mem: p.MemoryUsed}
 			}
 		}
+	}
 
-		fmt.Print(line)
-		*row++
+	type columnDef struct {
+		header string
+		cell   func(*types.ProcessInfo) *tview.TableCell
+	}
+
+	columns := []columnDef{
+		{
+			header: "PID",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%6d", info.PID)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		},
+		{
+			header: "USER",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(truncateLabel(info.User, 12)).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		},
+		{
+			header: "CPU%",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%5.1f", info.CPUPercent)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(usageColor(info.CPUPercent))
+			},
+		},
+		{
+			header: "MEM%",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%5.1f", info.MemPercent)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(usageColor(float64(info.MemPercent)))
+			},
+		},
+		{
+			header: "GPU",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				// check gpuMap for this PID
+				pid := int(info.PID)
+				if g, ok := gpuMap[pid]; ok {
+					return tview.NewTableCell(fmt.Sprintf("%d:%.0fMB", g.Index, g.Mem)).
+						SetAlign(tview.AlignRight).
+						SetTextColor(tcell.ColorLightCyan)
+				}
+				return tview.NewTableCell("").SetTextColor(tcell.ColorGray)
+			},
+		},
+		{
+			header: "STATE",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(info.Status).
+					SetAlign(tview.AlignCenter).
+					SetTextColor(tcell.ColorGray)
+			},
+		},
+	}
+
+	// If wide enough, show GPU column indicating GPU index and memory used
+	if width >= 100 {
+		columns = append(columns, columnDef{
+			header: "GPU",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				if snap == nil || snap.GPUProcesses == nil {
+					return tview.NewTableCell("")
+				}
+				pid := int(info.PID)
+				for gpuIdx, procs := range snap.GPUProcesses {
+					for _, p := range procs {
+						if p.PID == pid {
+							return tview.NewTableCell(fmt.Sprintf("G%d:%4.0fMB", gpuIdx, p.MemoryUsed)).
+								SetAlign(tview.AlignRight).
+								SetTextColor(tcell.ColorLightCyan)
+						}
+					}
+				}
+				return tview.NewTableCell("")
+			},
+		})
+	}
+
+	if width >= 90 {
+		columns = append(columns, columnDef{
+			header: "THR",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%3d", info.Threads)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		})
+	}
+	if width >= 110 {
+		columns = append(columns, columnDef{
+			header: "PRI",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%3d", info.Priority)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		})
+	}
+	if width >= 120 {
+		columns = append(columns, columnDef{
+			header: "NI",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				return tview.NewTableCell(fmt.Sprintf("%3d", info.Nice)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		})
+	}
+	if width >= 140 {
+		columns = append(columns,
+			columnDef{
+				header: "VIRT",
+				cell: func(info *types.ProcessInfo) *tview.TableCell {
+					return tview.NewTableCell(formatBytes(float64(info.VirtMem))).
+						SetAlign(tview.AlignRight).
+						SetTextColor(tcell.ColorGray)
+				},
+			},
+			columnDef{
+				header: "RES",
+				cell: func(info *types.ProcessInfo) *tview.TableCell {
+					return tview.NewTableCell(formatBytes(float64(info.ResMem))).
+						SetAlign(tview.AlignRight).
+						SetTextColor(tcell.ColorGray)
+				},
+			})
+	}
+
+	cmdWidth := clampInt(width-(len(columns)*10), 16, 48)
+	columns = append(columns,
+		columnDef{
+			header: "TIME",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				runtime := snap.Timestamp.Unix() - info.CreateTime/1000
+				if runtime < 0 {
+					runtime = 0
+				}
+				return tview.NewTableCell(formatProcessRuntime(runtime)).
+					SetAlign(tview.AlignRight).
+					SetTextColor(tcell.ColorGray)
+			},
+		},
+		columnDef{
+			header: "COMMAND",
+			cell: func(info *types.ProcessInfo) *tview.TableCell {
+				command := info.Command
+				if command == "" {
+					command = info.Name
+				}
+				return tview.NewTableCell(truncateLabel(command, cmdWidth)).
+					SetTextColor(tcell.ColorLightGray)
+			},
+		})
+
+	for col, def := range columns {
+		cell := tview.NewTableCell(fmt.Sprintf("[::b]%s", def.header)).
+			SetAlign(tview.AlignLeft).
+			SetSelectable(false).
+			SetTextColor(tcell.ColorLightCyan).
+			SetBackgroundColor(tcell.ColorBlack)
+		table.SetCell(0, col, cell)
+	}
+
+	if snap == nil || len(snap.Processes) == 0 {
+		table.SetCell(1, 0, tview.NewTableCell("[yellow]no process data available[-]").
+			SetSelectable(false))
+		table.Select(0, 0)
+		return
+	}
+
+	procs := make([]*types.ProcessInfo, len(snap.Processes))
+	copy(procs, snap.Processes)
+
+	switch d.sortMode {
+	case SortByMemory:
+		sort.SliceStable(procs, func(i, j int) bool {
+			return procs[i].MemPercent > procs[j].MemPercent
+		})
+	case SortByTime:
+		sort.SliceStable(procs, func(i, j int) bool {
+			return procs[i].CreateTime < procs[j].CreateTime
+		})
+	default:
+		sort.SliceStable(procs, func(i, j int) bool {
+			return procs[i].CPUPercent > procs[j].CPUPercent
+		})
+	}
+
+	_, _, _, height := table.GetInnerRect()
+	maxRows := height - 1
+	if maxRows < 5 {
+		maxRows = 25
+	}
+	if maxRows > len(procs) {
+		maxRows = len(procs)
+	}
+
+	for i := 0; i < maxRows; i++ {
+		proc := procs[i]
+		row := i + 1
+		for col, def := range columns {
+			table.SetCell(row, col, def.cell(proc))
+		}
+	}
+
+	title := fmt.Sprintf(" Processes · sort: %s ", d.sortMode.String())
+	table.SetTitle(title)
+	table.SetTitleColor(tcell.ColorLightCyan)
+
+	if rowCount := table.GetRowCount(); rowCount > 1 {
+		currentRow, currentCol := table.GetSelection()
+		if currentRow <= 0 || currentRow >= rowCount {
+			table.Select(1, 0)
+		} else {
+			table.Select(currentRow, currentCol)
+		}
 	}
 }

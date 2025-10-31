@@ -1,7 +1,3 @@
-//go:build !unix
+//go:build ignore
 
 package main
-
-func setupResizeCh() <-chan struct{} {
-	return make(chan struct{})
-}

@@ -2,55 +2,112 @@ package ui
 
 import (
 	"fmt"
-	"time"
+	"strings"
 
-	"github.com/shirou/gopsutil/v3/host"
+	"github.com/gdamore/tcell/v2"
 )
 
-func formatUptime(d time.Duration) string {
-	if d < time.Minute {
-		return d.Truncate(time.Second).String()
-	}
-	days := d / (24 * time.Hour)
-	d -= days * 24 * time.Hour
-	hours := d / time.Hour
-	d -= hours * time.Hour
-	minutes := d / time.Minute
-	if days > 0 {
-		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
-	}
-	return fmt.Sprintf("%dh %dm", hours, minutes)
-}
-
-func RenderHeader(row *int, width int) {
-	if width < 20 {
-		width = 20
-	}
-	MoveCursor(*row, 1)
-	ClearLine()
-
-	hostInfo, _ := host.Info()
-	if hostInfo == nil {
-		hostInfo = &host.InfoStat{Hostname: "unknown"}
-	}
-	uptime := time.Duration(hostInfo.Uptime) * time.Second
-
-	title := fmt.Sprintf("%swtop%s %s%s%s", Bold+Cyan, Reset, Bold, hostInfo.Hostname, Reset)
-	uptimeStr := fmt.Sprintf("%sUptime:%s %s", Green, Reset, formatUptime(uptime))
-	padding := width - VisibleLength(title) - VisibleLength(uptimeStr)
-	if padding < 1 {
-		padding = 1
+func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
+	if snap == nil {
+		d.header.SetText("[yellow]collecting metrics...[-]")
+		return
 	}
 
-	fmt.Printf("%s%s%s", title, Repeat(" ", padding), uptimeStr)
-	*row++
-
-	MoveCursor(*row, 1)
-	ClearLine()
-	sepLen := width
-	if sepLen < 1 {
-		sepLen = 1
+	if !rates.Valid && d.lastRates.Valid {
+		rates = d.lastRates
 	}
-	fmt.Printf("%s%s%s", Yellow, Repeat("=", sepLen), Reset)
-	*row++
+
+	_, _, width, _ := d.header.GetInnerRect()
+	if width <= 0 {
+		width = 80
+	}
+
+	reset := resetTag()
+	accent := colorTag(tcell.ColorLightCyan)
+
+	hostname := strings.TrimSpace(snap.Hostname)
+	if hostname == "" {
+		hostname = "unknown"
+	}
+
+	lineOne := joinWithSpacing([]string{
+		fmt.Sprintf("%s%s%s", accent, hostname, reset),
+		fmt.Sprintf("up %s", formatUptime(snap.Uptime)),
+		fmt.Sprintf("tasks %d/%d", snap.ProcessSummary.Running, snap.ProcessSummary.Total),
+	})
+
+	if snap.LoadReported {
+		loadStr := fmt.Sprintf("load %.2f %.2f %.2f", snap.Load1, snap.Load5, snap.Load15)
+		lineOne = joinWithSpacing([]string{lineOne, loadStr})
+	}
+
+	cpuBarWidth := clampInt(width/3, 12, 40)
+	cpuBar := renderUsageBar(snap.TotalCPU, cpuBarWidth)
+	cpuSpark := ""
+	sparkWidth := clampInt(width/3, 8, 40)
+	if d.cpuHistory != nil && sparkWidth >= 8 {
+		cpuSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth)
+	}
+
+	partsLineTwo := []string{
+		fmt.Sprintf("⚙ CPU %s%s", cpuBar, cpuSpark),
+	}
+
+	if snap.Memory != nil {
+		memPercent := snap.Memory.UsedPercent
+		memBar := renderUsageBar(memPercent, cpuBarWidth)
+		memSpark := ""
+		if d.memHistory != nil && sparkWidth >= 8 {
+			memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth)
+		}
+		partsLineTwo = append(partsLineTwo,
+			fmt.Sprintf("💾 MEM %s%s %s/%s",
+				memBar, memSpark,
+				formatBytes(float64(snap.Memory.Used)),
+				formatBytes(float64(snap.Memory.Total))))
+	}
+
+	if snap.Swap != nil && snap.Swap.Total > 0 {
+		swapBar := renderUsageBar(snap.Swap.UsedPercent, clampInt(cpuBarWidth, 10, 30))
+		partsLineTwo = append(partsLineTwo,
+			fmt.Sprintf("🔄 SWP %s %s/%s",
+				swapBar,
+				formatBytes(float64(snap.Swap.Used)),
+				formatBytes(float64(snap.Swap.Total))))
+	} else if snap.Disk != nil && snap.Disk.Total > 0 {
+		diskPercent := (float64(snap.Disk.Used) / float64(snap.Disk.Total)) * 100
+		diskBar := renderUsageBar(diskPercent, clampInt(cpuBarWidth, 10, 30))
+		partsLineTwo = append(partsLineTwo,
+			fmt.Sprintf("📀 DISK %s %s/%s",
+				diskBar,
+				formatBytes(float64(snap.Disk.Used)),
+				formatBytes(float64(snap.Disk.Total))))
+	}
+
+	lineTwo := joinWithSpacing(partsLineTwo)
+
+	netLine := ""
+	if rates.Valid {
+		up := formatBytesPerSec(rates.Up)
+		down := formatBytesPerSec(rates.Down)
+		upSpark, downSpark := "", ""
+		netSparkWidth := clampInt(width/4, 8, 32)
+		if d.netUpHistory != nil && netSparkWidth >= 8 {
+			upSpark = "  " + renderSparkline(d.netUpHistory.Series(), netSparkWidth)
+		}
+		if d.netDnHistory != nil && netSparkWidth >= 8 {
+			downSpark = "  " + renderSparkline(d.netDnHistory.Series(), netSparkWidth)
+		}
+		netLine = joinWithSpacing([]string{
+			fmt.Sprintf("↑ %s%s", up, upSpark),
+			fmt.Sprintf("↓ %s%s", down, downSpark),
+		})
+		netLine = fmt.Sprintf("🌐 %s", netLine)
+	}
+
+	if netLine == "" {
+		d.header.SetText(lineOne + "\n" + lineTwo)
+	} else {
+		d.header.SetText(lineOne + "\n" + lineTwo + "\n" + netLine)
+	}
 }
