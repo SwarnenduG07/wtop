@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/SwarnenduG07/wtop/metrics"
-	"github.com/gdamore/tcell/v2"
 )
 
 func (d *Dashboard) updateGPU(snap *snapshot) {
@@ -64,12 +63,12 @@ func (d *Dashboard) updateGPU(snap *snapshot) {
 		}
 
 		// GPU and Memory bars line
-		gpuBar := renderBtopBar(gpu.Utilization, 15, d.theme)
+		gpuBar := renderBtopBar(gpu.Utilization, 15)
 		memPercent := 0.0
 		if gpu.MemoryTotal > 0 {
 			memPercent = (gpu.MemoryUsed / gpu.MemoryTotal) * 100
 		}
-		memBar := renderBtopBar(memPercent, 15, d.theme)
+		memBar := renderBtopBar(memPercent, 15)
 		usedGB := gpu.MemoryUsed / 1024
 		totalGB := gpu.MemoryTotal / 1024
 		memUsage := fmt.Sprintf("%.1fG/%.1fG", usedGB, totalGB)
@@ -78,7 +77,7 @@ func (d *Dashboard) updateGPU(snap *snapshot) {
 		lines = append(lines, gpuMemLine)
 
 		// Memory Controller and SM clock line
-		memCtrlBar := renderBtopBar(gpu.MemoryUtilization, 15, d.theme)
+		memCtrlBar := renderBtopBar(gpu.MemoryUtilization, 15)
 		smClock := ""
 		if gpu.ClockSM > 0 {
 			smClock = fmt.Sprintf("SM: %dMHz", gpu.ClockSM)
@@ -87,31 +86,25 @@ func (d *Dashboard) updateGPU(snap *snapshot) {
 		lines = append(lines, memCtrlLine)
 
 		// Temperature bar with Power and Fan
-		tempBar := renderBtopBar(gpu.Temperature, 15, d.theme)
+		tempBar := renderBtopBar(gpu.Temperature, 15)
 		tempLine := fmt.Sprintf("  Temp: %s %.0f°C", tempBar, gpu.Temperature)
 
-		if gpu.PowerUsage > 0 {
-			tempLine += fmt.Sprintf("  Power: %.1fW", gpu.PowerUsage)
+		powerInfo := formatGPUPower(gpu)
+		if powerInfo != "Power N/A" {
+			tempLine += fmt.Sprintf("  %s", powerInfo)
 		}
 
-		if gpu.FanRPM > 0 {
-			tempLine += fmt.Sprintf("  Fan: %d RPM", gpu.FanRPM)
-		} else if gpu.FanSpeed > 0 {
-			tempLine += fmt.Sprintf("  Fan: %.0f%%", gpu.FanSpeed)
+		fanInfo := formatGPUFan(gpu)
+		if fanInfo != "Off" {
+			tempLine += fmt.Sprintf("  Fan: %s", fanInfo)
 		}
 
 		lines = append(lines, tempLine)
 
 		// Clocks line
-		if gpu.ClockCore > 0 || gpu.ClockMemory > 0 {
-			clockLine := "  Clocks:"
-			if gpu.ClockCore > 0 {
-				clockLine += fmt.Sprintf(" Core: %dMHz", gpu.ClockCore)
-			}
-			if gpu.ClockMemory > 0 {
-				clockLine += fmt.Sprintf("  Memory: %dMHz", gpu.ClockMemory)
-			}
-			lines = append(lines, clockLine)
+		clockInfo := formatGPUClocks(gpu)
+		if clockInfo != "Clock N/A" {
+			lines = append(lines, fmt.Sprintf("  %s", clockInfo))
 		}
 
 		// Throttle line
@@ -169,7 +162,7 @@ func truncateLabel(value string, max int) string {
 	return value[:max-3] + "..."
 }
 
-func renderBtopBar(value float64, width int, theme Theme) string {
+func renderBtopBar(value float64, width int) string {
 	width = clampInt(width, 6, 60)
 
 	// For temperature, scale to 0-100 range (assuming 100°C max)
@@ -193,17 +186,6 @@ func renderBtopBar(value float64, width int, theme Theme) string {
 	}
 	b.WriteString("]")
 	return b.String()
-}
-
-func getTempColor(temp float64, theme Theme) tcell.Color {
-	if temp < 50 {
-		return tcell.ColorGreen
-	} else if temp < 70 {
-		return theme.Warning
-	} else if temp < 85 {
-		return tcell.ColorOrange
-	}
-	return theme.Critical
 }
 
 func formatGPUFan(g *metrics.GPUInfo) string {
