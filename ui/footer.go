@@ -3,16 +3,10 @@ package ui
 import "fmt"
 
 func (d *Dashboard) updateFooter(snap *snapshot, rates netRates) {
-	lineOne := "[::b]F1[-] Help  [::b]/[-] Filter  [::b]s[-] Sort  [::b]t[-] Theme  [::b]↑↓[-] Scroll  [::b]q[-] Quit"
-
-	themeLabel := "Dark"
-	if !d.themeIsDark {
-		themeLabel = "Light"
-	}
+	lineOne := "[::b]F1[-] Help  [::b]/[-] Filter  [::b]s[-] Sort  [::b]↑↓[-] Scroll  [::b]q[-] Quit"
 
 	parts := []string{
 		fmt.Sprintf("Refresh %.0fs", d.refreshInterval.Seconds()),
-		fmt.Sprintf("Theme %s", themeLabel),
 		fmt.Sprintf("Sort %s", d.sortMode.String()),
 	}
 
