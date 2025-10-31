@@ -39,10 +39,8 @@ type netRates struct {
 	Valid bool
 }
 
-// Dashboard wires widgets together and orchestrates periodic refreshes.
 type Dashboard struct {
-	app   *tview.Application
-	theme Theme
+	app *tview.Application
 
 	root        *tview.Flex
 	leftFlex    *tview.Flex
@@ -80,20 +78,16 @@ type Dashboard struct {
 	netDnHistory *sparkHistory
 	gpuHistory   map[int]*sparkHistory
 
-	themeIsDark     bool
 	lastLayoutWidth int
 }
 
-// NewDashboard assembles the layout using the supplied theme.
-func NewDashboard(theme Theme) *Dashboard {
+func NewDashboard() *Dashboard {
 	app := tview.NewApplication()
 	dash := &Dashboard{
 		app:             app,
-		theme:           theme,
 		refreshInterval: refreshInterval,
 		stopCh:          make(chan struct{}),
 		sortMode:        SortByCPU,
-		themeIsDark:     theme == DarkTheme,
 	}
 
 	dash.header = dash.newSection(" SUMMARY ")
@@ -112,48 +106,42 @@ func NewDashboard(theme Theme) *Dashboard {
 	dash.gpuView.SetWrap(false)
 
 	dash.processTable = tview.NewTable().SetBorders(false)
-	dash.processTable.SetBackgroundColor(dash.theme.Background)
+	dash.processTable.SetBackgroundColor(tcell.ColorBlack)
 	dash.processTable.SetTitle(" Processes ")
-	dash.processTable.SetTitleColor(dash.theme.Accent)
+	dash.processTable.SetTitleColor(tcell.ColorLightCyan)
 	dash.processTable.SetBorder(true)
-	dash.processTable.SetBorderColor(dash.theme.Border)
+	dash.processTable.SetBorderColor(tcell.ColorDarkSlateGray)
 	dash.processTable.SetSelectable(true, false)
 	dash.processTable.SetFixed(1, 0)
 	dash.processTable.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(dash.theme.Background).
-		Background(dash.theme.Accent).
+		Foreground(tcell.ColorBlack).
+		Background(tcell.ColorLightCyan).
 		Bold(true))
 
 	dash.footer = tview.NewTextView().
 		SetDynamicColors(true).
 		SetRegions(false).
 		SetWrap(false)
-	dash.footer.SetBackgroundColor(dash.theme.FooterBackground)
+	dash.footer.SetBackgroundColor(tcell.ColorDimGray)
 
-	// Create CPU row (full width)
 	dash.cpuFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(dash.cpuView, 0, 1, false)
 
-	// Create Memory and Disk side by side
 	dash.memDiskFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(dash.memoryView, 0, 1, false).
 		AddItem(dash.diskView, 0, 1, false)
 
-	// Create GPU row (full width)
 	dash.gpuFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(dash.gpuView, 0, 1, false)
 
-	// Create left side: CPU, then Mem/Disk, then GPU
 	dash.leftFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(dash.cpuFlex, 0, 1, false).
 		AddItem(dash.memDiskFlex, 0, 1, false).
 		AddItem(dash.gpuFlex, 0, 2, false)
 
-	// Create right side with processes
 	dash.rightFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(dash.processTable, 0, 1, true)
 
-	// Main content area split between left and right
 	dash.mainFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(dash.leftFlex, 0, 1, false).
 		AddItem(dash.rightFlex, 0, 1, false)
@@ -163,12 +151,12 @@ func NewDashboard(theme Theme) *Dashboard {
 		AddItem(dash.mainFlex, 0, 1, false).
 		AddItem(dash.footer, 2, 0, false)
 
-	dash.root.SetBackgroundColor(dash.theme.Background)
-	dash.header.SetBackgroundColor(dash.theme.Background)
-	dash.cpuView.SetBackgroundColor(dash.theme.Background)
-	dash.memoryView.SetBackgroundColor(dash.theme.Background)
-	dash.diskView.SetBackgroundColor(dash.theme.Background)
-	dash.gpuView.SetBackgroundColor(dash.theme.Background)
+	dash.root.SetBackgroundColor(tcell.ColorBlack)
+	dash.header.SetBackgroundColor(tcell.ColorBlack)
+	dash.cpuView.SetBackgroundColor(tcell.ColorBlack)
+	dash.memoryView.SetBackgroundColor(tcell.ColorBlack)
+	dash.diskView.SetBackgroundColor(tcell.ColorBlack)
+	dash.gpuView.SetBackgroundColor(tcell.ColorBlack)
 
 	dash.cpuHistory = newSparkHistory(historySize)
 	dash.memHistory = newSparkHistory(historySize)
@@ -190,7 +178,6 @@ func NewDashboard(theme Theme) *Dashboard {
 	return dash
 }
 
-// Run starts the dashboard and blocks until the UI exits.
 func (d *Dashboard) Run() error {
 	initial, err := collectSnapshot(maxProcessEntries)
 	if err == nil {
@@ -215,7 +202,7 @@ func (d *Dashboard) stop() {
 	}
 	select {
 	case <-d.stopCh:
-		// already closed
+
 	default:
 		close(d.stopCh)
 	}
@@ -330,40 +317,6 @@ func (d *Dashboard) computeNetworkRates(snap *snapshot, fromLoop bool) netRates 
 	return netRates{Up: up, Down: down, Valid: true}
 }
 
-func (d *Dashboard) toggleTheme() {
-	if d.themeIsDark {
-		d.theme = LightTheme
-	} else {
-		d.theme = DarkTheme
-	}
-	d.themeIsDark = !d.themeIsDark
-	d.applyTheme()
-	if d.lastSnapshot != nil {
-		d.applySnapshot(d.lastSnapshot, false)
-	}
-}
-
-func (d *Dashboard) applyTheme() {
-	d.root.SetBackgroundColor(d.theme.Background)
-	d.header.SetBackgroundColor(d.theme.Background)
-	d.cpuView.SetBackgroundColor(d.theme.Background)
-	d.memoryView.SetBackgroundColor(d.theme.Background)
-	d.gpuView.SetBackgroundColor(d.theme.Background)
-	d.processTable.SetBackgroundColor(d.theme.Background)
-	d.processTable.SetTitleColor(d.theme.Accent)
-	d.processTable.SetBorderColor(d.theme.Border)
-	d.processTable.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(d.theme.Background).
-		Background(d.theme.Accent).
-		Bold(true))
-	d.footer.SetBackgroundColor(d.theme.FooterBackground)
-
-	d.header.SetBorderColor(d.theme.Border)
-	d.cpuView.SetBorderColor(d.theme.Border)
-	d.memoryView.SetBorderColor(d.theme.Border)
-	d.gpuView.SetBorderColor(d.theme.Border)
-}
-
 func (d *Dashboard) cycleSortMode() {
 	switch d.sortMode {
 	case SortByCPU:
@@ -385,9 +338,9 @@ func (d *Dashboard) newSection(title string) *tview.TextView {
 		SetWrap(false)
 	tv.SetTitle(title)
 	tv.SetBorder(true)
-	tv.SetBorderColor(d.theme.Border)
-	tv.SetTitleColor(d.theme.Accent)
-	tv.SetBackgroundColor(d.theme.Background)
+	tv.SetBorderColor(tcell.ColorDarkSlateGray)
+	tv.SetTitleColor(tcell.ColorLightCyan)
+	tv.SetBackgroundColor(tcell.ColorBlack)
 	return tv
 }
 
@@ -400,7 +353,6 @@ func (d *Dashboard) reflowLayout(width int) {
 	}
 	d.lastLayoutWidth = width
 
-	// For very narrow screens, stack left and right vertically
 	if width < 100 {
 		d.mainFlex.SetDirection(tview.FlexRow)
 		d.mainFlex.ResizeItem(d.leftFlex, 0, 2)
