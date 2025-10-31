@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/SwarnenduG07/wtop/types"
@@ -46,14 +47,14 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%6d", info.PID)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		},
 		{
 			header: "USER",
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(truncateLabel(info.User, 12)).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		},
 		{
@@ -61,7 +62,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%5.1f", info.CPUPercent)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(usageColor(info.CPUPercent, d.theme))
+					SetTextColor(usageColor(info.CPUPercent))
 			},
 		},
 		{
@@ -69,7 +70,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%5.1f", info.MemPercent)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(usageColor(float64(info.MemPercent), d.theme))
+					SetTextColor(usageColor(float64(info.MemPercent)))
 			},
 		},
 		{
@@ -80,9 +81,9 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 				if g, ok := gpuMap[pid]; ok {
 					return tview.NewTableCell(fmt.Sprintf("%d:%.0fMB", g.Index, g.Mem)).
 						SetAlign(tview.AlignRight).
-						SetTextColor(d.theme.Accent)
+						SetTextColor(tcell.ColorLightCyan)
 				}
-				return tview.NewTableCell("").SetTextColor(d.theme.Muted)
+				return tview.NewTableCell("").SetTextColor(tcell.ColorGray)
 			},
 		},
 		{
@@ -90,7 +91,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(info.Status).
 					SetAlign(tview.AlignCenter).
-					SetTextColor(d.theme.Muted)
+					SetTextColor(tcell.ColorGray)
 			},
 		},
 	}
@@ -109,7 +110,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 						if p.PID == pid {
 							return tview.NewTableCell(fmt.Sprintf("G%d:%4.0fMB", gpuIdx, p.MemoryUsed)).
 								SetAlign(tview.AlignRight).
-								SetTextColor(d.theme.Accent)
+								SetTextColor(tcell.ColorLightCyan)
 						}
 					}
 				}
@@ -124,7 +125,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%3d", info.Threads)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		})
 	}
@@ -134,7 +135,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%3d", info.Priority)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		})
 	}
@@ -144,7 +145,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 			cell: func(info *types.ProcessInfo) *tview.TableCell {
 				return tview.NewTableCell(fmt.Sprintf("%3d", info.Nice)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		})
 	}
@@ -155,7 +156,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 				cell: func(info *types.ProcessInfo) *tview.TableCell {
 					return tview.NewTableCell(formatBytes(float64(info.VirtMem))).
 						SetAlign(tview.AlignRight).
-						SetTextColor(d.theme.Muted)
+						SetTextColor(tcell.ColorGray)
 				},
 			},
 			columnDef{
@@ -163,7 +164,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 				cell: func(info *types.ProcessInfo) *tview.TableCell {
 					return tview.NewTableCell(formatBytes(float64(info.ResMem))).
 						SetAlign(tview.AlignRight).
-						SetTextColor(d.theme.Muted)
+						SetTextColor(tcell.ColorGray)
 				},
 			})
 	}
@@ -179,7 +180,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 				}
 				return tview.NewTableCell(formatProcessRuntime(runtime)).
 					SetAlign(tview.AlignRight).
-					SetTextColor(d.theme.Muted)
+					SetTextColor(tcell.ColorGray)
 			},
 		},
 		columnDef{
@@ -190,7 +191,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 					command = info.Name
 				}
 				return tview.NewTableCell(truncateLabel(command, cmdWidth)).
-					SetTextColor(d.theme.Foreground)
+					SetTextColor(tcell.ColorLightGray)
 			},
 		})
 
@@ -198,8 +199,8 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 		cell := tview.NewTableCell(fmt.Sprintf("[::b]%s", def.header)).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false).
-			SetTextColor(d.theme.Accent).
-			SetBackgroundColor(d.theme.Background)
+			SetTextColor(tcell.ColorLightCyan).
+			SetBackgroundColor(tcell.ColorBlack)
 		table.SetCell(0, col, cell)
 	}
 
@@ -247,7 +248,7 @@ func (d *Dashboard) updateProcessTable(snap *snapshot) {
 
 	title := fmt.Sprintf(" Processes · sort: %s ", d.sortMode.String())
 	table.SetTitle(title)
-	table.SetTitleColor(d.theme.Accent)
+	table.SetTitleColor(tcell.ColorLightCyan)
 
 	if rowCount := table.GetRowCount(); rowCount > 1 {
 		currentRow, currentCol := table.GetSelection()
