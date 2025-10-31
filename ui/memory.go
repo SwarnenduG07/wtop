@@ -21,7 +21,7 @@ func (d *Dashboard) updateMemory(snap *snapshot) {
 	mem := snap.Memory
 	memSpark := ""
 	if d.memHistory != nil && sparkWidth >= 8 {
-		memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth, d.theme)
+		memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth)
 	}
 	// Split output into memory (left) and disk (right) panes.
 	memLines := []string{}
@@ -32,7 +32,7 @@ func (d *Dashboard) updateMemory(snap *snapshot) {
 
 	// Memory: Used (bar + spark + value + percent)
 	memLines = append(memLines, fmt.Sprintf("Used:  %s  %s (%.0f%%)",
-		renderUsageBar(mem.UsedPercent, barWidth, d.theme)+memSpark,
+		renderUsageBar(mem.UsedPercent, barWidth)+memSpark,
 		formatBytes(float64(mem.Used)),
 		mem.UsedPercent))
 
@@ -41,7 +41,7 @@ func (d *Dashboard) updateMemory(snap *snapshot) {
 		availPercent := (float64(mem.Available) / float64(mem.Total)) * 100
 		memLines = append(memLines, fmt.Sprintf("Available: %s  %s (%.0f%%)",
 			formatBytes(float64(mem.Available)),
-			renderUsageBar(availPercent, clampInt(barWidth, 10, 60), d.theme),
+			renderUsageBar(availPercent, clampInt(barWidth, 10, 60)),
 			availPercent))
 	}
 
@@ -71,10 +71,10 @@ func (d *Dashboard) updateMemory(snap *snapshot) {
 	if snap.Swap != nil && snap.Swap.Total > 0 {
 		swapSpark := ""
 		if d.swapHistory != nil && sparkWidth >= 8 {
-			swapSpark = "  " + renderSparkline(d.swapHistory.Series(), sparkWidth, d.theme)
+			swapSpark = "  " + renderSparkline(d.swapHistory.Series(), sparkWidth)
 		}
 		diskLines = append(diskLines, fmt.Sprintf("Swap %s  %s/%s",
-			renderUsageBar(snap.Swap.UsedPercent, barWidth, d.theme)+swapSpark,
+			renderUsageBar(snap.Swap.UsedPercent, barWidth)+swapSpark,
 			formatBytes(float64(snap.Swap.Used)),
 			formatBytes(float64(snap.Swap.Total))))
 	}
@@ -83,10 +83,10 @@ func (d *Dashboard) updateMemory(snap *snapshot) {
 		diskPercent := (float64(snap.Disk.Used) / float64(snap.Disk.Total)) * 100
 		diskSpark := ""
 		if d.diskHistory != nil && sparkWidth >= 8 {
-			diskSpark = "  " + renderSparkline(d.diskHistory.Series(), sparkWidth, d.theme)
+			diskSpark = "  " + renderSparkline(d.diskHistory.Series(), sparkWidth)
 		}
 		diskLines = append(diskLines, fmt.Sprintf("Disk %s  %s/%s (%s)",
-			renderUsageBar(diskPercent, barWidth, d.theme)+diskSpark,
+			renderUsageBar(diskPercent, barWidth)+diskSpark,
 			formatBytes(float64(snap.Disk.Used)),
 			formatBytes(float64(snap.Disk.Total)),
 			snap.DiskPath))
