@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
@@ -21,7 +23,7 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 	}
 
 	reset := resetTag()
-	accent := colorTag(d.theme.Accent)
+	accent := colorTag(tcell.ColorLightCyan)
 
 	hostname := strings.TrimSpace(snap.Hostname)
 	if hostname == "" {
@@ -40,11 +42,11 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 	}
 
 	cpuBarWidth := clampInt(width/3, 12, 40)
-	cpuBar := renderUsageBar(snap.TotalCPU, cpuBarWidth, d.theme)
+	cpuBar := renderUsageBar(snap.TotalCPU, cpuBarWidth)
 	cpuSpark := ""
 	sparkWidth := clampInt(width/3, 8, 40)
 	if d.cpuHistory != nil && sparkWidth >= 8 {
-		cpuSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth, d.theme)
+		cpuSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth)
 	}
 
 	partsLineTwo := []string{
@@ -53,10 +55,10 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 
 	if snap.Memory != nil {
 		memPercent := snap.Memory.UsedPercent
-		memBar := renderUsageBar(memPercent, cpuBarWidth, d.theme)
+		memBar := renderUsageBar(memPercent, cpuBarWidth)
 		memSpark := ""
 		if d.memHistory != nil && sparkWidth >= 8 {
-			memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth, d.theme)
+			memSpark = "  " + renderSparkline(d.memHistory.Series(), sparkWidth)
 		}
 		partsLineTwo = append(partsLineTwo,
 			fmt.Sprintf("💾 MEM %s%s %s/%s",
@@ -66,7 +68,7 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 	}
 
 	if snap.Swap != nil && snap.Swap.Total > 0 {
-		swapBar := renderUsageBar(snap.Swap.UsedPercent, clampInt(cpuBarWidth, 10, 30), d.theme)
+		swapBar := renderUsageBar(snap.Swap.UsedPercent, clampInt(cpuBarWidth, 10, 30))
 		partsLineTwo = append(partsLineTwo,
 			fmt.Sprintf("🔄 SWP %s %s/%s",
 				swapBar,
@@ -74,7 +76,7 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 				formatBytes(float64(snap.Swap.Total))))
 	} else if snap.Disk != nil && snap.Disk.Total > 0 {
 		diskPercent := (float64(snap.Disk.Used) / float64(snap.Disk.Total)) * 100
-		diskBar := renderUsageBar(diskPercent, clampInt(cpuBarWidth, 10, 30), d.theme)
+		diskBar := renderUsageBar(diskPercent, clampInt(cpuBarWidth, 10, 30))
 		partsLineTwo = append(partsLineTwo,
 			fmt.Sprintf("📀 DISK %s %s/%s",
 				diskBar,
@@ -91,10 +93,10 @@ func (d *Dashboard) updateHeader(snap *snapshot, rates netRates) {
 		upSpark, downSpark := "", ""
 		netSparkWidth := clampInt(width/4, 8, 32)
 		if d.netUpHistory != nil && netSparkWidth >= 8 {
-			upSpark = "  " + renderSparkline(d.netUpHistory.Series(), netSparkWidth, d.theme)
+			upSpark = "  " + renderSparkline(d.netUpHistory.Series(), netSparkWidth)
 		}
 		if d.netDnHistory != nil && netSparkWidth >= 8 {
-			downSpark = "  " + renderSparkline(d.netDnHistory.Series(), netSparkWidth, d.theme)
+			downSpark = "  " + renderSparkline(d.netDnHistory.Series(), netSparkWidth)
 		}
 		netLine = joinWithSpacing([]string{
 			fmt.Sprintf("↑ %s%s", up, upSpark),
