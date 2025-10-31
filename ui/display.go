@@ -9,57 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// Theme captures the core palette used across widgets.
-type Theme struct {
-	Background       tcell.Color
-	Foreground       tcell.Color
-	Accent           tcell.Color
-	Warning          tcell.Color
-	Critical         tcell.Color
-	Border           tcell.Color
-	Muted            tcell.Color
-	GraphLow         tcell.Color
-	GraphMedium      tcell.Color
-	GraphHigh        tcell.Color
-	FooterBackground tcell.Color
-}
-
-// Default dark and light palettes.
-var (
-	DarkTheme = Theme{
-		Background:       tcell.ColorBlack,
-		Foreground:       tcell.ColorLightGray,
-		Accent:           tcell.ColorLightCyan,
-		Warning:          tcell.ColorYellow,
-		Critical:         tcell.ColorIndianRed,
-		Border:           tcell.ColorDarkSlateGray,
-		Muted:            tcell.ColorGray,
-		GraphLow:         tcell.ColorGreen,
-		GraphMedium:      tcell.ColorYellow,
-		GraphHigh:        tcell.ColorRed,
-		FooterBackground: tcell.ColorDimGray,
-	}
-
-	LightTheme = Theme{
-		Background:       tcell.ColorWhite,
-		Foreground:       tcell.ColorBlack,
-		Accent:           tcell.ColorDarkCyan,
-		Warning:          tcell.ColorOrange,
-		Critical:         tcell.ColorOrangeRed,
-		Border:           tcell.ColorGray,
-		Muted:            tcell.ColorDarkGray,
-		GraphLow:         tcell.ColorGreen,
-		GraphMedium:      tcell.ColorOrange,
-		GraphHigh:        tcell.ColorRed,
-		FooterBackground: tcell.ColorLightGray,
-	}
-)
-
-// DefaultTheme returns the palette to use when no explicit preference is set.
-func DefaultTheme() Theme {
-	return DarkTheme
-}
-
 func colorTag(color tcell.Color) string {
 	r, g, b := color.RGB()
 	return fmt.Sprintf("[#%02x%02x%02x]", r, g, b)
@@ -69,14 +18,14 @@ func resetTag() string {
 	return "[-:-:-]"
 }
 
-func usageColor(percent float64, theme Theme) tcell.Color {
+func usageColor(percent float64) tcell.Color {
 	switch {
 	case percent >= 85:
-		return theme.Critical
+		return tcell.ColorIndianRed
 	case percent >= 65:
-		return theme.GraphMedium
+		return tcell.ColorYellow
 	default:
-		return theme.GraphLow
+		return tcell.ColorGreen
 	}
 }
 
@@ -90,7 +39,7 @@ func clampInt(v, min, max int) int {
 	return v
 }
 
-func renderUsageBar(percent float64, width int, theme Theme) string {
+func renderUsageBar(percent float64, width int) string {
 	width = clampInt(width, 6, 60)
 	filled := int(math.Round(percent / 100 * float64(width)))
 	if filled > width {
@@ -98,8 +47,8 @@ func renderUsageBar(percent float64, width int, theme Theme) string {
 	}
 
 	var b strings.Builder
-	fillColor := usageColor(percent, theme)
-	b.WriteString(colorTag(theme.Border))
+	fillColor := usageColor(percent)
+	b.WriteString(colorTag(tcell.ColorDarkSlateGray))
 	b.WriteRune('[')
 	b.WriteString(resetTag())
 	for i := 0; i < width; i++ {
@@ -107,12 +56,12 @@ func renderUsageBar(percent float64, width int, theme Theme) string {
 			b.WriteString(colorTag(fillColor))
 			b.WriteRune('█')
 		} else {
-			b.WriteString(colorTag(theme.Muted))
+			b.WriteString(colorTag(tcell.ColorGray))
 			b.WriteRune(' ')
 		}
 	}
 	b.WriteString(resetTag())
-	b.WriteString(colorTag(theme.Border))
+	b.WriteString(colorTag(tcell.ColorDarkSlateGray))
 	b.WriteRune(']')
 	b.WriteString(resetTag())
 	b.WriteRune(' ')
@@ -153,13 +102,13 @@ func (s *sparkHistory) Series() []float64 {
 	return s.values
 }
 
-func renderSparkline(series []float64, width int, theme Theme) string {
+func renderSparkline(series []float64, width int) string {
 	width = clampInt(width, 4, 80)
 	if width == 0 {
 		return ""
 	}
 	if len(series) == 0 {
-		return colorTag(theme.Muted) + strings.Repeat("·", width) + resetTag()
+		return colorTag(tcell.ColorGray) + strings.Repeat("·", width) + resetTag()
 	}
 
 	maxVal := 0.0
@@ -169,7 +118,7 @@ func renderSparkline(series []float64, width int, theme Theme) string {
 		}
 	}
 	if maxVal <= 0 {
-		return colorTag(theme.Muted) + strings.Repeat("·", width) + resetTag()
+		return colorTag(tcell.ColorGray) + strings.Repeat("·", width) + resetTag()
 	}
 
 	blocks := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
@@ -210,7 +159,7 @@ func renderSparkline(series []float64, width int, theme Theme) string {
 	var b strings.Builder
 	for _, v := range samples {
 		if v <= 0 {
-			b.WriteString(colorTag(theme.Muted))
+			b.WriteString(colorTag(tcell.ColorGray))
 			b.WriteRune('·')
 			continue
 		}
@@ -222,7 +171,7 @@ func renderSparkline(series []float64, width int, theme Theme) string {
 		if idx >= len(blocks) {
 			idx = len(blocks) - 1
 		}
-		b.WriteString(colorTag(usageColor(percent, theme)))
+		b.WriteString(colorTag(usageColor(percent)))
 		b.WriteRune(blocks[idx])
 	}
 	b.WriteString(resetTag())
