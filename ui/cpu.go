@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func (d *Dashboard) updateCPU(snap *snapshot) {
@@ -17,11 +19,11 @@ func (d *Dashboard) updateCPU(snap *snapshot) {
 		width = 80
 	}
 	totalBarWidth := clampInt(width-30, 12, 60)
-	totalBar := renderUsageBar(snap.TotalCPU, totalBarWidth, d.theme)
+	totalBar := renderUsageBar(snap.TotalCPU, totalBarWidth)
 	totalSpark := ""
 	sparkWidth := clampInt(width-totalBarWidth-12, 8, 40)
 	if d.cpuHistory != nil && sparkWidth >= 8 {
-		totalSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth, d.theme)
+		totalSpark = "  " + renderSparkline(d.cpuHistory.Series(), sparkWidth)
 	}
 	totalLine := fmt.Sprintf("Total %s%s", totalBar, totalSpark)
 
@@ -31,6 +33,22 @@ func (d *Dashboard) updateCPU(snap *snapshot) {
 
 	var lines []string
 	lines = append(lines, totalLine)
+
+	if snap.LoadReported {
+		loadLine := fmt.Sprintf("Load: %.2f %.2f %.2f\n", snap.Load1, snap.Load5, snap.Load15)
+		lines = append(lines, loadLine)
+	}
+
+	if len(snap.CPUTemp) > 0 {
+		tempStr := "Temp:"
+		for i, t := range snap.CPUTemp {
+			if i > 0 {
+				tempStr += ","
+			}
+			tempStr += fmt.Sprintf(" %.1f°C", t)
+		}
+		lines = append(lines, tempStr)
+	}
 
 	for i := 0; i < len(cores); i += coresPerRow {
 		var builder strings.Builder
@@ -42,10 +60,10 @@ func (d *Dashboard) updateCPU(snap *snapshot) {
 			if builder.Len() > 0 {
 				builder.WriteString("  ")
 			}
-			label := fmt.Sprintf("%sC%02d%s", colorTag(d.theme.Accent), idx+1, resetTag())
+			label := fmt.Sprintf("%sC%02d%s", colorTag(tcell.ColorLightCyan), idx+1, resetTag())
 			builder.WriteString(label)
 			builder.WriteByte(' ')
-			builder.WriteString(renderUsageBar(cores[idx], barWidth, d.theme))
+			builder.WriteString(renderUsageBar(cores[idx], barWidth))
 		}
 		lines = append(lines, builder.String())
 	}
