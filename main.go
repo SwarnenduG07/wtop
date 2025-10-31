@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	dashboard := ui.NewDashboard(ui.DefaultTheme())
+	dashboard := ui.NewDashboard()
 	if err := dashboard.Run(); err != nil {
 		log.Fatalf("wtop: %v", err)
 	}
