@@ -2,6 +2,7 @@ package ui
 
 import (
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -35,6 +36,8 @@ type snapshot struct {
 
 	CPUPerCore []float64
 	TotalCPU   float64
+	CPUFreq    []float64
+	CPUTemp    []float64
 
 	Memory *mem.VirtualMemoryStat
 	Swap   *mem.SwapMemoryStat
@@ -70,6 +73,20 @@ func collectSnapshot(limit int) (*snapshot, error) {
 	}
 	if perCore, err := cpu.Percent(0, true); err == nil {
 		snap.CPUPerCore = perCore
+	}
+
+	if freqs, err := cpu.Info(); err == nil {
+		for _, f := range freqs {
+			snap.CPUFreq = append(snap.CPUFreq, f.Mhz)
+		}
+	}
+
+	if temps, err := host.SensorsTemperatures(); err == nil {
+		for _, t := range temps {
+			if strings.Contains(strings.ToLower(t.SensorKey), "cpu") || strings.Contains(strings.ToLower(t.SensorKey), "core") {
+				snap.CPUTemp = append(snap.CPUTemp, t.Temperature)
+			}
+		}
 	}
 
 	if vm, err := mem.VirtualMemory(); err == nil {
